@@ -1,4 +1,5 @@
 mod df;
+mod toolkit;
 use numpy::{PyArray1, PyArray2, ToPyArray};
 use pyo3::{prelude::*, py_run};
 
@@ -20,6 +21,7 @@ macro_rules! register_submodule {
 fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let rs_module = register_submodule!(m, "cfpyo3._rs", "_rs");
     let df_module = register_submodule!(rs_module, "cfpyo3._rs.df", "df");
+    let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit", "toolkit");
 
     df_module.add_class::<df::DataFrameF64>()?;
     df_module.add("INDEX_CHAR_LEN", df::INDEX_CHAR_LEN)?;
@@ -44,6 +46,9 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     pub fn values<'py>(py: Python<'py>, df: &df::DataFrameF64) -> Bound<'py, PyArray2<f64>> {
         df.data.to_pyarray_bound(py)
     }
+
+    let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc", "misc");
+    misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
 
     Ok(())
 }
