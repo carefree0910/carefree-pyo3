@@ -99,7 +99,7 @@ jobs:
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-sdist
+          name: wheel-sdist
           path: dist
 
   release:
