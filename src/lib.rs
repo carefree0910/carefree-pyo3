@@ -1,6 +1,6 @@
 mod df;
 mod toolkit;
-use numpy::{PyArray1, PyArray2, ToPyArray};
+use numpy::{ndarray::ArrayView2, PyArray1, PyArray2, PyReadonlyArray2, ToPyArray};
 use pyo3::{prelude::*, py_run};
 
 macro_rules! register_submodule {
@@ -51,6 +51,24 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc", "misc");
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
+
+    let array_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.array", "array");
+    #[pyfn(array_module)]
+    pub fn fast_concat_2d_axis0_f32<'py>(
+        py: Python<'py>,
+        arrays: Vec<PyReadonlyArray2<f32>>,
+    ) -> Bound<'py, PyArray1<f32>> {
+        let arrays: Vec<ArrayView2<f32>> = arrays.iter().map(|x| x.as_array()).collect();
+        toolkit::array::fast_concat_2d_axis0_f32(py, arrays)
+    }
+    #[pyfn(array_module)]
+    pub fn fast_concat_2d_axis0_f64<'py>(
+        py: Python<'py>,
+        arrays: Vec<PyReadonlyArray2<f64>>,
+    ) -> Bound<'py, PyArray1<f64>> {
+        let arrays: Vec<ArrayView2<f64>> = arrays.iter().map(|x| x.as_array()).collect();
+        toolkit::array::fast_concat_2d_axis0_f64(py, arrays)
+    }
 
     Ok(())
 }
