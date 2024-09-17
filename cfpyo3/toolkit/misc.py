@@ -60,3 +60,9 @@ def hash_str_dict(
     if static_keys:
         return hasher("$?^^?$".join([d[k] for k in key_order]))
     return hasher("$?^^?$".join([f"{k}$?%%?${d[k]}" for k in key_order]))
+
+
+__all__ = [
+    "hash_dict",
+    "hash_str_dict",
+]
