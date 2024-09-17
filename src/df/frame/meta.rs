@@ -1,7 +1,7 @@
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
-use super::{ColumnsDtype, DataFrameF64, IndexDtype};
+use crate::df::{ColumnsDtype, DataFrameF64, IndexDtype};
 
 #[pyfunction]
 pub fn new(

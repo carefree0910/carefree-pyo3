@@ -9,8 +9,7 @@ pub const INDEX_CHAR_LEN: usize = 256;
 pub type IndexDtype = Datetime<Nanoseconds>;
 pub type ColumnsDtype = PyFixedString<INDEX_CHAR_LEN>;
 
-pub mod indexing;
-pub mod meta;
+pub mod frame;
 
 #[pyclass]
 pub struct DataFrameF64 {

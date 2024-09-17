@@ -4,7 +4,7 @@ use numpy::{
 };
 use pyo3::prelude::*;
 
-use super::DataFrameF64;
+use crate::df::DataFrameF64;
 
 #[pyfunction]
 pub fn rows(df: &DataFrameF64, indices: PyReadonlyArray1<i64>) -> DataFrameF64 {
