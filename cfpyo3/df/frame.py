@@ -32,6 +32,9 @@ class DataFrame:
     def __init__(self, _df: DataFrameF64) -> None:
         self._df = _df
 
+    def __sub__(self, other: RHS) -> "DataFrame":
+        return DataFrame(self._df.with_data(self._df.values - rhs_to_np(other)))
+
     @property
     def shape(self) -> Tuple[int, int]:
         return self._df.shape
