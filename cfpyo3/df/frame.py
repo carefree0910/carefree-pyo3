@@ -1,13 +1,10 @@
 from typing import Tuple
 from typing import TYPE_CHECKING
-from cfpyo3._rs.df import DataFrameF64
 from cfpyo3._rs.df import INDEX_CHAR_LEN
-from cfpyo3._rs.df.frame import new
-from cfpyo3._rs.df.frame import rows
-from cfpyo3._rs.df.frame import shape
 from cfpyo3._rs.df.frame import index
 from cfpyo3._rs.df.frame import columns
 from cfpyo3._rs.df.frame import values
+from cfpyo3._rs.df.frame import DataFrameF64
 
 if TYPE_CHECKING:
     import numpy as np
@@ -27,14 +24,14 @@ class DataFrame:
 
     @property
     def shape(self) -> Tuple[int, int]:
-        return shape(self._df)
+        return self._df.shape
 
     def rows(self, indices: "np.ndarray") -> "DataFrame":
         import numpy as np
 
         if indices.dtype != np.int64:
             indices = indices.astype(np.int64)
-        return DataFrame(rows(self._df, indices))
+        return DataFrame(self._df.rows(indices))
 
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd
@@ -57,7 +54,7 @@ class DataFrame:
             index = index.astype("datetime64[ns]")
         if values.dtype != np.float64:
             values = values.astype(np.float64)
-        return DataFrame(new(index, columns, values))
+        return DataFrame(DataFrameF64.new(index, columns, values))
 
 
 __all__ = [

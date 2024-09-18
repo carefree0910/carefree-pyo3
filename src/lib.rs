@@ -23,29 +23,26 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let df_module = register_submodule!(rs_module, "cfpyo3._rs.df", "df");
     let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit", "toolkit");
 
-    df_module.add_class::<df::DataFrameF64>()?;
     df_module.add("INDEX_CHAR_LEN", df::INDEX_CHAR_LEN)?;
 
     let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame", "frame");
-    frame_module.add_function(wrap_pyfunction!(df::frame::meta::new, &frame_module)?)?;
-    frame_module.add_function(wrap_pyfunction!(df::frame::meta::shape, &frame_module)?)?;
-    frame_module.add_function(wrap_pyfunction!(df::frame::indexing::rows, &frame_module)?)?;
+    frame_module.add_class::<df::frame::DataFrameF64>()?;
     #[pyfn(frame_module)]
     pub fn index<'py>(
         py: Python<'py>,
-        df: &df::DataFrameF64,
+        df: &df::frame::DataFrameF64,
     ) -> Bound<'py, PyArray1<df::IndexDtype>> {
         df.index.to_pyarray_bound(py)
     }
     #[pyfn(frame_module)]
     pub fn columns<'py>(
         py: Python<'py>,
-        df: &df::DataFrameF64,
+        df: &df::frame::DataFrameF64,
     ) -> Bound<'py, PyArray1<df::ColumnsDtype>> {
         df.columns.to_pyarray_bound(py)
     }
     #[pyfn(frame_module)]
-    pub fn values<'py>(py: Python<'py>, df: &df::DataFrameF64) -> Bound<'py, PyArray2<f64>> {
+    pub fn values<'py>(py: Python<'py>, df: &df::frame::DataFrameF64) -> Bound<'py, PyArray2<f64>> {
         df.data.to_pyarray_bound(py)
     }
 
