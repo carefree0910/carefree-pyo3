@@ -32,22 +32,22 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
 
     let array_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.array", "array");
-    #[pyfn(array_module)]
-    pub fn fast_concat_2d_axis0_f32<'py>(
-        py: Python<'py>,
-        arrays: Vec<PyReadonlyArray2<f32>>,
-    ) -> Bound<'py, PyArray1<f32>> {
-        let arrays: Vec<ArrayView2<f32>> = arrays.iter().map(|x| x.as_array()).collect();
-        toolkit::array::fast_concat_2d_axis0_f32(py, arrays)
+    macro_rules! fast_concat_2d_axis0_impl {
+        ($func:ident, $dtype:ty) => {
+            #[pyfunction]
+            pub fn $func<'py>(
+                py: Python<'py>,
+                arrays: Vec<PyReadonlyArray2<$dtype>>,
+            ) -> Bound<'py, PyArray1<$dtype>> {
+                let arrays: Vec<ArrayView2<$dtype>> = arrays.iter().map(|x| x.as_array()).collect();
+                toolkit::array::$func(py, arrays)
+            }
+        };
     }
-    #[pyfn(array_module)]
-    pub fn fast_concat_2d_axis0_f64<'py>(
-        py: Python<'py>,
-        arrays: Vec<PyReadonlyArray2<f64>>,
-    ) -> Bound<'py, PyArray1<f64>> {
-        let arrays: Vec<ArrayView2<f64>> = arrays.iter().map(|x| x.as_array()).collect();
-        toolkit::array::fast_concat_2d_axis0_f64(py, arrays)
-    }
+    fast_concat_2d_axis0_impl!(fast_concat_2d_axis0_f32, f32);
+    fast_concat_2d_axis0_impl!(fast_concat_2d_axis0_f64, f64);
+    array_module.add_function(wrap_pyfunction!(fast_concat_2d_axis0_f32, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(fast_concat_2d_axis0_f64, &array_module)?)?;
 
     Ok(())
 }
