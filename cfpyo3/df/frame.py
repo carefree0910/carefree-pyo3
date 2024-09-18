@@ -39,9 +39,9 @@ class DataFrame:
     def rows(self, indices: "np.ndarray") -> "DataFrame":
         import numpy as np
 
-        if indices.dtype != np.int64:
-            indices = indices.astype(np.int64)
-        return DataFrame(self._df.rows(indices))
+        data = np.ascontiguousarray(self._df.values[indices])
+        index = np.ascontiguousarray(self._df.index[indices])
+        return DataFrame(DataFrameF64.new(index, self._df.columns, data))
 
     def corr_with_axis1(self, other: RHS) -> "np.ndarray":
         return self._df.corr_with_axis1(rhs_to_np(other))

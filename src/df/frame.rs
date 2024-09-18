@@ -3,7 +3,6 @@ use pyo3::prelude::*;
 
 use super::{ColumnsDtype, IndexDtype};
 
-mod indexing;
 mod meta;
 mod ops;
 
