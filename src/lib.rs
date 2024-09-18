@@ -1,6 +1,6 @@
 mod df;
 mod toolkit;
-use numpy::{ndarray::ArrayView2, PyArray1, PyArray2, PyReadonlyArray2, ToPyArray};
+use numpy::{ndarray::ArrayView2, PyArray1, PyReadonlyArray2};
 use pyo3::{prelude::*, py_run};
 
 macro_rules! register_submodule {
@@ -27,24 +27,6 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame", "frame");
     frame_module.add_class::<df::frame::DataFrameF64>()?;
-    #[pyfn(frame_module)]
-    pub fn index<'py>(
-        py: Python<'py>,
-        df: &df::frame::DataFrameF64,
-    ) -> Bound<'py, PyArray1<df::IndexDtype>> {
-        df.index.to_pyarray_bound(py)
-    }
-    #[pyfn(frame_module)]
-    pub fn columns<'py>(
-        py: Python<'py>,
-        df: &df::frame::DataFrameF64,
-    ) -> Bound<'py, PyArray1<df::ColumnsDtype>> {
-        df.columns.to_pyarray_bound(py)
-    }
-    #[pyfn(frame_module)]
-    pub fn values<'py>(py: Python<'py>, df: &df::frame::DataFrameF64) -> Bound<'py, PyArray2<f64>> {
-        df.data.to_pyarray_bound(py)
-    }
 
     let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc", "misc");
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;

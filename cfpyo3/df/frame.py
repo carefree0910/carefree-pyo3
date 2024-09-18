@@ -1,9 +1,6 @@
 from typing import Tuple
 from typing import TYPE_CHECKING
 from cfpyo3._rs.df import INDEX_CHAR_LEN
-from cfpyo3._rs.df.frame import index
-from cfpyo3._rs.df.frame import columns
-from cfpyo3._rs.df.frame import values
 from cfpyo3._rs.df.frame import DataFrameF64
 
 if TYPE_CHECKING:
@@ -37,9 +34,9 @@ class DataFrame:
         import pandas as pd
 
         return pd.DataFrame(
-            values(self._df),
-            index=index(self._df),
-            columns=columns(self._df),
+            self._df.values,
+            index=self._df.index,
+            columns=self._df.columns,
             copy=False,
         )
 
