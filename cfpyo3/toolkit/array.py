@@ -1,4 +1,6 @@
+from typing import Any
 from typing import List
+from typing import Callable
 from typing import Optional
 from typing import TYPE_CHECKING
 from cfpyo3._rs.toolkit.array import fast_concat_2d_axis0_f32
@@ -9,19 +11,32 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
-def fast_concat_2d_axis0(arrays: List["np.ndarray"]) -> "np.ndarray":
+def _dispatch(
+    name: str,
+    f32_fn: Callable,
+    f64_fn: Callable,
+    pivot: "np.ndarray",
+    *args: Any,
+    **kwargs: Any,
+) -> "np.ndarray":
     import numpy as np
 
-    pivot = arrays[0]
     if pivot.dtype == np.float32:
-        out = fast_concat_2d_axis0_f32(arrays)
-    elif pivot.dtype == np.float64:
-        out = fast_concat_2d_axis0_f64(arrays)
-    else:
-        raise ValueError(
-            "`fast_concat_2d_axis0` only supports `f32` & `f64`, "
-            f"'{pivot.dtype}' found"
-        )
+        return f32_fn(*args, **kwargs)
+    if pivot.dtype == np.float64:
+        return f64_fn(*args, **kwargs)
+    raise ValueError(f"`{name}` only supports `f32` & `f64`, '{pivot.dtype}' found")
+
+
+def fast_concat_2d_axis0(arrays: List["np.ndarray"]) -> "np.ndarray":
+    pivot = arrays[0]
+    out = _dispatch(
+        "fast_concat_2d_axis0",
+        fast_concat_2d_axis0_f32,
+        fast_concat_2d_axis0_f64,
+        pivot,
+        arrays,
+    )
     return out.reshape([-1, pivot.shape[1]])
 
 
