@@ -4,9 +4,10 @@ use numpy::{ndarray::ArrayView2, PyArray1, PyReadonlyArray2};
 use pyo3::{prelude::*, py_run};
 
 macro_rules! register_submodule {
-    ($parent:expr, $hierarchy:expr, $module_name:expr) => {{
+    ($parent:expr, $hierarchy:expr) => {{
         let py = $parent.py();
-        let submodule = PyModule::new_bound(py, $module_name)?;
+        let module_name = $hierarchy.split('.').last().unwrap();
+        let submodule = PyModule::new_bound(py, module_name)?;
         py_run!(
             py,
             submodule,
@@ -19,19 +20,19 @@ macro_rules! register_submodule {
 
 #[pymodule]
 fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let rs_module = register_submodule!(m, "cfpyo3._rs", "_rs");
-    let df_module = register_submodule!(rs_module, "cfpyo3._rs.df", "df");
-    let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit", "toolkit");
+    let rs_module = register_submodule!(m, "cfpyo3._rs");
+    let df_module = register_submodule!(rs_module, "cfpyo3._rs.df");
+    let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit");
 
     df_module.add("INDEX_CHAR_LEN", df::INDEX_CHAR_LEN)?;
 
-    let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame", "frame");
+    let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame");
     frame_module.add_class::<df::frame::DataFrameF64>()?;
 
-    let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc", "misc");
+    let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc");
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
 
-    let array_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.array", "array");
+    let array_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.array");
     macro_rules! fast_concat_2d_axis0_impl {
         ($func:ident, $dtype:ty) => {
             #[pyfunction]
