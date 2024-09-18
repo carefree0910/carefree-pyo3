@@ -23,6 +23,7 @@ env:
 
 jobs:
   check:
+    if: ${{ !contains(github.event.commits[0].message, '📦️') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +40,7 @@ jobs:
         run: mypy cfpyo3
 
   test:
+    if: ${{ !contains(github.event.commits[0].message, '📦️') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
