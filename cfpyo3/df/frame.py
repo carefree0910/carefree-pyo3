@@ -49,6 +49,9 @@ class DataFrame:
     def pow(self, exponent: float) -> "DataFrame":
         return DataFrame(self._df.with_data(self._df.values**exponent))
 
+    def mean_axis1(self) -> "np.ndarray":
+        return self._df.mean_axis1()
+
     def corr_with_axis1(self, other: RHS) -> "np.ndarray":
         return self._df.corr_with_axis1(rhs_to_np(other))
 
