@@ -34,13 +34,12 @@ def hash_dict(
             if isinstance(v, dict):
                 hashes.append(_hash(v))
             elif isinstance(v, set):
-                hashes.append(hasher(str(sorted(v))))
+                hashes.append(hash_fn(str(sorted(v))))
             else:
-                hashes.append(hasher(str(v)))
-        return hasher("".join(hashes))
+                hashes.append(hash_fn(str(v)))
+        return hash_fn("".join(hashes))
 
-    if hasher is None:
-        hasher = hash_code
+    hash_fn = hasher or hash_code
     return _hash(d)
 
 
