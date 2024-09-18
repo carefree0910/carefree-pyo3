@@ -38,7 +38,7 @@ def fast_concat_dfs_axis0(
         values = [d.values for d in dfs]
     else:
         values = [d.values.astype(np.float32, copy=False) for d in dfs]
-    values = fast_concat_2d_axis0(values)
+    values = fast_concat_2d_axis0(values)  # type: ignore
     indexes = np.concatenate([d.index for d in dfs])
     if columns is None:
         columns = dfs[0].columns
