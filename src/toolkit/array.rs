@@ -22,6 +22,13 @@ impl<'a, T> UnsafeSlice<'a, T> {
         Self { slice: self.slice }
     }
 
+    pub fn set(&mut self, i: usize, value: T) {
+        let ptr = self.slice[i].get();
+        unsafe {
+            ptr::write(ptr, value);
+        }
+    }
+
     pub fn copy_from_slice(&mut self, i: usize, src: &[T])
     where
         T: Copy,

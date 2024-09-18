@@ -10,13 +10,17 @@ NUM_ROWS = 239
 NUM_COLUMNS = 5000
 
 
-@lru_cache
-def get_pandas_df() -> pd.DataFrame:
+def np_to_df(values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(
-        np.random.random([NUM_ROWS, NUM_COLUMNS]),
+        values,
         index=np.arange(0, NUM_ROWS, dtype="datetime64[ns]"),
         columns=np.arange(NUM_COLUMNS).astype(f"S{INDEX_CHAR_LEN}"),
     )
+
+
+@lru_cache
+def get_pandas_df() -> pd.DataFrame:
+    return np_to_df(np.random.random([NUM_ROWS, NUM_COLUMNS]))
 
 
 def test_shape():
@@ -32,3 +36,25 @@ def test_rows():
         df_rows = df.rows(indices).to_pandas()
         pandas_df_rows = pandas_df.iloc[indices]
         assert df_rows.equals(pandas_df_rows)
+
+
+def get_random_pandas_df() -> pd.DataFrame:
+    x = np.random.random(NUM_ROWS * NUM_COLUMNS)
+    mask = x <= 0.25
+    x[mask] = np.nan
+    x = x.reshape([NUM_ROWS, NUM_COLUMNS])
+    return np_to_df(x)
+
+
+def test_corr():
+    for _ in range(3):
+        df0 = get_random_pandas_df()
+        df1 = get_random_pandas_df()
+        df_rs0 = DataFrame.from_pandas(df0)
+        c0 = df0.corrwith(df1, axis=1).values
+        c1 = df_rs0.corr_with_axis1(df1)
+        c2 = df_rs0.corr_with_axis1(df1.values)
+        c3 = df_rs0.corr_with_axis1(DataFrame.from_pandas(df1))
+        np.testing.assert_allclose(c0, c1)
+        np.testing.assert_allclose(c0, c2)
+        np.testing.assert_allclose(c0, c3)

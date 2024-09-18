@@ -1,4 +1,5 @@
 from typing import Tuple
+from typing import Union
 from typing import TYPE_CHECKING
 from cfpyo3._rs.df import INDEX_CHAR_LEN
 from cfpyo3._rs.df.frame import DataFrameF64
@@ -6,6 +7,8 @@ from cfpyo3._rs.df.frame import DataFrameF64
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
+
+RHS = Union["np.ndarray", "pd.DataFrame", "DataFrame"]
 
 
 class DataFrame:
@@ -29,6 +32,15 @@ class DataFrame:
         if indices.dtype != np.int64:
             indices = indices.astype(np.int64)
         return DataFrame(self._df.rows(indices))
+
+    def corr_with_axis1(self, other: RHS) -> "np.ndarray":
+        import pandas as pd
+
+        if isinstance(other, pd.DataFrame):
+            other = other.values
+        elif isinstance(other, DataFrame):
+            other = other._df.values
+        return self._df.corr_with_axis1(other)
 
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd

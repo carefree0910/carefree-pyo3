@@ -5,6 +5,7 @@ use super::{ColumnsDtype, IndexDtype};
 
 mod indexing;
 mod meta;
+mod ops;
 
 #[pyclass]
 pub struct DataFrameF64 {
