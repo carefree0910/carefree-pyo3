@@ -46,6 +46,9 @@ class DataFrame:
         index = np.ascontiguousarray(self._df.index[indices])
         return DataFrame(DataFrameF64.new(index, self._df.columns, data))
 
+    def pow(self, exponent: float) -> "DataFrame":
+        return DataFrame(self._df.with_data(self._df.values**exponent))
+
     def corr_with_axis1(self, other: RHS) -> "np.ndarray":
         return self._df.corr_with_axis1(rhs_to_np(other))
 
