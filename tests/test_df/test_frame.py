@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from cfpyo3.df import DataFrame
 from functools import lru_cache
+from cfpyo3.df import DataFrame
 from cfpyo3._rs.df import INDEX_CHAR_LEN
 
 
@@ -44,6 +44,20 @@ def get_random_pandas_df() -> pd.DataFrame:
     x[mask] = np.nan
     x = x.reshape([NUM_ROWS, NUM_COLUMNS])
     return np_to_df(x)
+
+
+def test_mse():
+    for _ in range(3):
+        df0 = get_random_pandas_df()
+        df1 = get_random_pandas_df()
+        df_rs0 = DataFrame.from_pandas(df0)
+        mse0 = (df0 - df1).pow(2).mean(axis=1).values
+        mse1 = (df_rs0 - df1).pow(2).mean_axis1()
+        mse2 = (df_rs0 - df1.values).pow(2).mean_axis1()
+        mse3 = (df_rs0 - DataFrame.from_pandas(df1)).pow(2).mean_axis1()
+        np.testing.assert_allclose(mse0, mse1)
+        np.testing.assert_allclose(mse0, mse2)
+        np.testing.assert_allclose(mse0, mse3)
 
 
 def test_corr():
