@@ -34,6 +34,13 @@ impl<'a, T> UnsafeSlice<'a, T> {
 }
 
 const CONCAT_GROUP_LIMIT: usize = 4 * 239 * 5000;
+type Task<'a, 'b, D> = (Vec<usize>, Vec<ArrayView2<'a, D>>, UnsafeSlice<'b, D>);
+#[inline]
+fn fill_concat<D: Copy>((offsets, arrays, mut out): Task<D>) {
+    offsets.iter().enumerate().for_each(|(i, &offset)| {
+        out.copy_from_slice(offset, arrays[i].as_slice().unwrap());
+    });
+}
 fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
     arrays: Vec<ArrayView2<D>>,
     num_rows: Vec<usize>,
@@ -65,7 +72,7 @@ fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
     }
 
     let nbytes = mem::size_of::<D>();
-    type Task<'a, 'b, D> = (Vec<usize>, Vec<ArrayView2<'a, D>>, UnsafeSlice<'b, D>);
+
     let mut tasks: Vec<Task<D>> = Vec::new();
     let mut current_tasks: Option<Task<D>> = Some((Vec::new(), Vec::new(), out.shadow()));
     let mut nbytes_cumsum = 0;
@@ -91,18 +98,12 @@ fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
         }
     }
 
-    let consume = |(offsets, arrays, mut out): Task<D>| {
-        offsets.iter().enumerate().for_each(|(i, &offset)| {
-            out.copy_from_slice(offset, arrays[i].as_slice().unwrap());
-        });
-    };
-
     let max_threads = available_parallelism()
         .expect("failed to get available parallelism")
         .get();
     let num_threads = (tasks.len() / tasks_divisor).min(max_threads * 8).min(512);
     if num_threads <= 1 {
-        tasks.into_iter().for_each(consume);
+        tasks.into_iter().for_each(fill_concat);
     } else {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads)
@@ -111,7 +112,7 @@ fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
 
         pool.scope(move |s| {
             tasks.into_iter().for_each(|task| {
-                s.spawn(move |_| consume(task));
+                s.spawn(move |_| fill_concat(task));
             });
         });
     }
