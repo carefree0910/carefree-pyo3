@@ -1,7 +1,11 @@
-use std::{cell::UnsafeCell, mem, ptr, thread::available_parallelism};
+use std::{cell::UnsafeCell, iter::zip, mem, ops::AddAssign, ptr, thread::available_parallelism};
 
-use itertools::izip;
-use numpy::{ndarray::ArrayView2, IntoPyArray, PyArray1};
+use itertools::{enumerate, izip};
+use num_traits::{Float, FromPrimitive};
+use numpy::{
+    ndarray::{ArrayView1, ArrayView2, Axis, ScalarOperand},
+    IntoPyArray, PyArray1,
+};
 use pyo3::prelude::*;
 
 #[derive(Copy, Clone)]
@@ -146,6 +150,90 @@ macro_rules! fast_concat_2d_axis0_impl {
         }
     };
 }
-
 fast_concat_2d_axis0_impl!(fast_concat_2d_axis0_f32, f32, 1);
 fast_concat_2d_axis0_impl!(fast_concat_2d_axis0_f64, f64, 2);
+
+fn mean<T>(a: ArrayView1<T>) -> T
+where
+    T: Float + AddAssign,
+{
+    let mut sum = T::zero();
+    let mut num = T::zero();
+    for &x in a.iter() {
+        if x.is_nan() {
+            continue;
+        }
+        sum += x;
+        num += T::one();
+    }
+    if num.is_zero() {
+        T::nan()
+    } else {
+        sum / num
+    }
+}
+
+fn corr<T>(a: ArrayView1<T>, b: ArrayView1<T>) -> T
+where
+    T: Float + AddAssign + FromPrimitive + ScalarOperand,
+{
+    let valid_indices: Vec<usize> = zip(a.iter(), b.iter())
+        .enumerate()
+        .filter_map(|(i, (&x, &y))| {
+            if x.is_nan() || y.is_nan() {
+                None
+            } else {
+                Some(i)
+            }
+        })
+        .collect();
+    if valid_indices.is_empty() {
+        return T::nan();
+    }
+    let a = a.select(Axis(0), &valid_indices);
+    let b = b.select(Axis(0), &valid_indices);
+    let a_mean = a.mean().unwrap();
+    let b_mean = b.mean().unwrap();
+    let a = a - a_mean;
+    let b = b - b_mean;
+    let cov = a.dot(&b);
+    let var1 = a.dot(&a);
+    let var2 = b.dot(&b);
+    cov / (var1.sqrt() * var2.sqrt())
+}
+
+pub fn mean_axis1<T>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T>
+where
+    T: Float + AddAssign + FromPrimitive + Send + Sync,
+{
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(|s| {
+        enumerate(a.rows()).for_each(|(i, row)| {
+            s.spawn(move |_| slice.set(i, mean(row)));
+        });
+    });
+    res
+}
+
+pub fn corr_axis1<T>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T>
+where
+    T: Float + AddAssign + FromPrimitive + ScalarOperand + Send + Sync,
+{
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(move |s| {
+        zip(a.rows(), b.rows()).enumerate().for_each(|(i, (a, b))| {
+            s.spawn(move |_| slice.set(i, corr(a, b)));
+        });
+    });
+    res
+}

@@ -29,6 +29,7 @@ version = "0.1.5"
 dependencies = [
  "itertools",
  "md-5",
+ "num-traits",
  "numpy",
  "pyo3",
  "rayon",
