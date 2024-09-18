@@ -22,7 +22,7 @@ fn corr(a: ArrayView1<f64>, b: ArrayView1<f64>) -> f64 {
         })
         .collect();
     if valid_indices.is_empty() {
-        return 0.;
+        return f64::NAN;
     }
     let a = a.select(Axis(0), &valid_indices);
     let b = b.select(Axis(0), &valid_indices);
