@@ -28,9 +28,8 @@ def generate_complex_dict():
     current = root
     for _ in range(1000):
         if random.random() <= 0.1:
-            current = root.setdefault(time.time(), {})
-        current[time.time()] = time.time()
-        time.sleep(1e-8)
+            current = root.setdefault(random.random(), {})
+        current[random.random()] = time.time()
     return root
 
 
