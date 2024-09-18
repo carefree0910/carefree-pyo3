@@ -43,9 +43,11 @@ impl DataFrameF64 {
         py: Python<'a>,
         other: PyReadonlyArray2<f64>,
     ) -> Bound<'a, PyArray1<f64>> {
+        let data = self.get_data_array(py);
+        let data = data.borrow();
         let other = other.as_array();
         let other = other.borrow();
-        let mut res: Vec<f64> = vec![0.; self.data.nrows()];
+        let mut res: Vec<f64> = vec![0.; data.nrows()];
         let mut slice = UnsafeSlice::new(res.as_mut_slice());
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(8)
@@ -53,7 +55,7 @@ impl DataFrameF64 {
             .unwrap();
         py.allow_threads(|| {
             pool.scope(move |s| {
-                zip(self.data.rows(), other.rows())
+                zip(data.rows(), other.rows())
                     .enumerate()
                     .for_each(|(i, (a, b))| {
                         s.spawn(move |_| slice.set(i, corr(a, b)));

@@ -1,4 +1,4 @@
-use numpy::ndarray::{ArcArray1, ArcArray2};
+use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 
 use super::{ColumnsDtype, IndexDtype};
@@ -9,7 +9,7 @@ mod ops;
 
 #[pyclass]
 pub struct DataFrameF64 {
-    pub index: ArcArray1<IndexDtype>,
-    pub columns: ArcArray1<ColumnsDtype>,
-    pub data: ArcArray2<f64>,
+    pub index: Py<PyArray1<IndexDtype>>,
+    pub columns: Py<PyArray1<ColumnsDtype>>,
+    pub data: Py<PyArray2<f64>>,
 }
