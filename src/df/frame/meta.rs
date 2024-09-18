@@ -55,4 +55,12 @@ impl DataFrameF64 {
             self.get_columns_array(py).len(),
         )
     }
+
+    fn with_data(&self, py: Python, data: Py<PyArray2<f64>>) -> Self {
+        DataFrameF64 {
+            index: self.index.clone_ref(py),
+            columns: self.columns.clone_ref(py),
+            data,
+        }
+    }
 }
