@@ -11,6 +11,16 @@ if TYPE_CHECKING:
 RHS = Union["np.ndarray", "pd.DataFrame", "DataFrame"]
 
 
+def rhs_to_np(rhs: RHS) -> "np.ndarray":
+    import pandas as pd
+
+    if isinstance(rhs, pd.DataFrame):
+        return rhs.values
+    if isinstance(rhs, DataFrame):
+        return rhs._df.values
+    return rhs
+
+
 class DataFrame:
     """
     A DataFrame which aims to efficiently process a specific type of data:
@@ -34,13 +44,7 @@ class DataFrame:
         return DataFrame(self._df.rows(indices))
 
     def corr_with_axis1(self, other: RHS) -> "np.ndarray":
-        import pandas as pd
-
-        if isinstance(other, pd.DataFrame):
-            other = other.values
-        elif isinstance(other, DataFrame):
-            other = other._df.values
-        return self._df.corr_with_axis1(other)
+        return self._df.corr_with_axis1(rhs_to_np(other))
 
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd
