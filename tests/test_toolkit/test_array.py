@@ -1,9 +1,11 @@
 import random
 
 import numpy as np
+import pandas as pd
 
 from typing import List
 from cfpyo3.toolkit.array import fast_concat_2d_axis0
+from cfpyo3.toolkit.array import fast_concat_dfs_axis0
 
 
 def generate_arrays(dtype: np.dtype) -> List[np.ndarray]:
@@ -20,6 +22,8 @@ def test_fast_concat_2d_axis0_f32():
             np.concatenate(arrays, axis=0),
             fast_concat_2d_axis0(arrays),
         )
+        dfs = [pd.DataFrame(a) for a in arrays]
+        assert pd.concat(dfs).equals(fast_concat_dfs_axis0(dfs))
 
 
 def test_fast_concat_2d_axis0_f64():
@@ -29,3 +33,5 @@ def test_fast_concat_2d_axis0_f64():
             np.concatenate(arrays, axis=0),
             fast_concat_2d_axis0(arrays),
         )
+        dfs = [pd.DataFrame(a) for a in arrays]
+        assert pd.concat(dfs).equals(fast_concat_dfs_axis0(dfs))
