@@ -1,7 +1,6 @@
+use super::{ColumnsDtype, IndexDtype};
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
-
-use super::{ColumnsDtype, IndexDtype};
 
 mod meta;
 mod ops;

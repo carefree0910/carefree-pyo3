@@ -1,5 +1,4 @@
 use md5::{Digest, Md5};
-
 use pyo3::prelude::*;
 
 #[pyfunction]

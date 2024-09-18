@@ -1,11 +1,8 @@
-use std::borrow::Borrow;
-
+use super::DataFrameF64;
+use crate::toolkit::array::{corr_axis1, mean_axis1};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
-
-use crate::toolkit::array::{corr_axis1, mean_axis1};
-
-use super::DataFrameF64;
+use std::borrow::Borrow;
 
 #[pymethods]
 impl DataFrameF64 {

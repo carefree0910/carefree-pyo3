@@ -1,5 +1,3 @@
-use std::{cell::UnsafeCell, iter::zip, mem, ops::AddAssign, ptr, thread::available_parallelism};
-
 use itertools::{enumerate, izip};
 use num_traits::{Float, FromPrimitive};
 use numpy::{
@@ -7,6 +5,7 @@ use numpy::{
     IntoPyArray, PyArray1,
 };
 use pyo3::prelude::*;
+use std::{cell::UnsafeCell, iter::zip, mem, ops::AddAssign, ptr, thread::available_parallelism};
 
 #[derive(Copy, Clone)]
 pub struct UnsafeSlice<'a, T> {

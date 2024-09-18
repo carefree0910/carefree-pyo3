@@ -1,10 +1,9 @@
+use super::{ColumnsDtype, DataFrameF64, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
     PyArray1, PyArray2, PyArrayMethods,
 };
 use pyo3::prelude::*;
-
-use super::{ColumnsDtype, DataFrameF64, IndexDtype};
 
 impl DataFrameF64 {
     pub fn get_index_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, IndexDtype> {
