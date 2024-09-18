@@ -3,8 +3,8 @@ use pyo3::prelude::*;
 
 use super::{ColumnsDtype, IndexDtype};
 
-pub mod indexing;
-pub mod meta;
+mod indexing;
+mod meta;
 
 #[pyclass]
 pub struct DataFrameF64 {
