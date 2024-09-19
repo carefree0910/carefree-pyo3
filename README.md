@@ -4,13 +4,9 @@
 
 ## Installation
 
-`carefree-pyo3` has some prerequisites, the easiest way to install them is to use `requirements.txt`:
-
-```bash
-pip install -r requirements.txt
-```
-
-After that, simply install `carefree-pyo3` with `pip`:
+`carefree-pyo3` requires:
+- Python 3.8 or higher.
+- `numpy < 2.x`, because currently rust numpy doesn't support numpy 2.x.
 
 ```bash
 pip install carefree-pyo3
