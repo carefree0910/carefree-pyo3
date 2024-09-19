@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "carefree-pyo3"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "itertools",
  "md-5",
