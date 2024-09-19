@@ -69,13 +69,9 @@ class DataFrame:
     def from_pandas(cls, df: "pd.DataFrame") -> "DataFrame":
         import numpy as np
 
-        index = df.index.values
-        columns = df.columns.values.astype(f"S{INDEX_CHAR_LEN}")
-        values = df.values
-        if index.dtype != "datetime64[ns]":
-            index = index.astype("datetime64[ns]")
-        if values.dtype != np.float64:
-            values = values.astype(np.float64)
+        index = np.require(df.index.values, "datetime64[ns]", "C")
+        columns = np.require(df.columns.values, f"S{INDEX_CHAR_LEN}", "C")
+        values = np.require(df.values, np.float64, "C")
         return DataFrame(DataFrameF64.new(index, columns, values))
 
 
