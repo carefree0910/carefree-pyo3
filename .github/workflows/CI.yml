@@ -32,7 +32,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
-        run: pip install .
+        run: |
+          pip install toml && python -c 'import toml; c = toml.load("pyproject.toml") \
+          print("\n".join(c["build-system"]["requires"]))' | pip install -r /dev/stdin
       - name: Install check dependencies
         run: pip install black mypy pandas-stubs
       - name: black
