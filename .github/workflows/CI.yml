@@ -82,7 +82,6 @@ jobs:
           activate-environment: test
           python-version: ${{ env.PYTHON_VERSION }}
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo build --verbose
       - run: cargo test --verbose
 
   build-wheels:
