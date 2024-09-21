@@ -3,7 +3,7 @@ import pandas as pd
 
 from functools import lru_cache
 from cfpyo3.df import DataFrame
-from cfpyo3._rs.df import INDEX_CHAR_LEN
+from cfpyo3._rs.df import COLUMNS_NBYTES
 
 
 NUM_ROWS = 239
@@ -14,7 +14,7 @@ def np_to_df(values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(
         values,
         index=np.arange(0, NUM_ROWS, dtype="datetime64[ns]"),
-        columns=np.arange(NUM_COLUMNS).astype(f"S{INDEX_CHAR_LEN}"),
+        columns=np.arange(NUM_COLUMNS).astype(f"S{COLUMNS_NBYTES}"),
     )
 
 

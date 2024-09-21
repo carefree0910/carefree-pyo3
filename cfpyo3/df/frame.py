@@ -1,7 +1,7 @@
 from typing import Tuple
 from typing import Union
 from typing import TYPE_CHECKING
-from cfpyo3._rs.df import INDEX_CHAR_LEN
+from cfpyo3._rs.df import COLUMNS_NBYTES
 from cfpyo3._rs.df.frame import DataFrameF64
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ class DataFrame:
     """
     A DataFrame which aims to efficiently process a specific type of data:
     - index: datetime64[ns]
-    - columns: S{INDEX_CHAR_LEN}
+    - columns: S{COLUMNS_NBYTES}
     - values: f64
     """
 
@@ -70,7 +70,7 @@ class DataFrame:
         import numpy as np
 
         index = np.require(df.index.values, "datetime64[ns]", "C")
-        columns = np.require(df.columns.values, f"S{INDEX_CHAR_LEN}", "C")
+        columns = np.require(df.columns.values, f"S{COLUMNS_NBYTES}", "C")
         values = np.require(df.values, np.float64, "C")
         return DataFrame(DataFrameF64.new(index, columns, values))
 

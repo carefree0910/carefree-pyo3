@@ -26,7 +26,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let df_module = register_submodule!(rs_module, "cfpyo3._rs.df");
     let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit");
 
-    df_module.add("INDEX_CHAR_LEN", cfpyo3_core::df::INDEX_CHAR_LEN)?;
+    df_module.add("COLUMNS_NBYTES", cfpyo3_core::df::COLUMNS_NBYTES)?;
 
     let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame");
     frame_module.add_class::<df::frame::DataFrameF64>()?;

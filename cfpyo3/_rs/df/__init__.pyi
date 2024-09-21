@@ -1,1 +1,1 @@
-INDEX_CHAR_LEN: int
+COLUMNS_NBYTES: int
