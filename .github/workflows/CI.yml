@@ -52,7 +52,9 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          args: --release --out dist --find-interpreter
+          args: >
+            --manifest-path cfpyo3_rs_py/Cargo.toml
+            --out dist
           sccache: "true"
       - name: Install wheel
         run: pip install dist/*.whl
@@ -108,7 +110,10 @@ jobs:
         with:
           command: build
           target: ${{ steps.target.outputs.target }}
-          args: --release --out dist
+          args: >
+            --release
+            --manifest-path cfpyo3_rs_py/Cargo.toml
+            --out dist
           manylinux: ${{ matrix.architecture == 'aarch64' && '2_24' || 'auto' }}
 
       - name: Upload wheel
@@ -126,7 +131,9 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist
+          args: >
+            --manifest-path cfpyo3_rs_py/Cargo.toml
+            --out dist
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
