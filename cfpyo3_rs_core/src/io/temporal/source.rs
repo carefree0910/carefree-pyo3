@@ -2,7 +2,7 @@ use crate::{df::frame::DataFrame, toolkit::array::AFloat};
 use itertools::izip;
 use std::{future::Future, iter::zip};
 
-#[cfg(feature = "source-s3")]
+#[cfg(feature = "io-source-s3")]
 pub mod s3;
 
 pub trait Source<T: AFloat> {

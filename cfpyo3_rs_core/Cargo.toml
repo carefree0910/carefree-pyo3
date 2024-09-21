@@ -30,7 +30,7 @@ tokio = { version = "1.40.0", features = ["full"], optional = true }
 
 [features]
 default = []
-source-s3 = [
+io-source-s3 = [
     "dep:bytes",
     "dep:once_cell",
     "dep:opendal",
