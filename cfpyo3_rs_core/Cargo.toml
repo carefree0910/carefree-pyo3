@@ -29,7 +29,7 @@ opendal = { version = "0.50.0", features = ["services-s3"], optional = true }
 tokio = { version = "1.40.0", features = ["full"], optional = true }
 
 [features]
-default = ["source-s3"]
+default = []
 source-s3 = [
     "dep:bytes",
     "dep:once_cell",
