@@ -31,7 +31,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cfpyo3_rs_core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "itertools",
  "md-5",
@@ -42,7 +42,7 @@ dependencies = [
 
 [[package]]
 name = "cfpyo3_rs_py"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "cfpyo3_rs_core",
  "numpy",
