@@ -2,6 +2,9 @@ use crate::{df::frame::DataFrame, toolkit::array::AFloat};
 use itertools::izip;
 use std::{future::Future, iter::zip};
 
+#[cfg(feature = "source-s3")]
+pub mod s3;
+
 pub trait Source<T: AFloat> {
     /// read data from source, based on `date` and `key`
     fn read(&self, date: &str, key: &str) -> impl Future<Output = DataFrame<T>>;
