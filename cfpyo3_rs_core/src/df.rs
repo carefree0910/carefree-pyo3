@@ -1,3 +1,7 @@
+//! # df
+//!
+//! a DataFrame module that mainly focuses on temporal data
+
 use numpy::{
     datetime::{units::Nanoseconds, Datetime},
     PyFixedString,
