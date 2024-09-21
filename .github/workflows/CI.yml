@@ -20,6 +20,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.8"
+  CARGO_TERM_COLOR: always
 
 jobs:
   check:
@@ -39,7 +40,7 @@ jobs:
       - name: mypy
         run: mypy cfpyo3
 
-  test:
+  test-py:
     if: ${{ !contains(github.event.commits[0].message, '📦️') }}
     runs-on: ubuntu-latest
     steps:
@@ -60,8 +61,23 @@ jobs:
       - name: Run tests
         run: pytest
 
+  test-rs:
+    if: ${{ !contains(github.event.commits[0].message, '📦️') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - beta
+          - nightly
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+
   build-wheels:
-    needs: test
+    needs: [test-py, test-rs]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -102,7 +118,7 @@ jobs:
           path: dist/*.whl
 
   sdist:
-    needs: test
+    needs: [test-py, test-rs]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
