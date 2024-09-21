@@ -2,6 +2,7 @@ use super::Source;
 use crate::df::frame::DataFrame;
 use crate::df::{ColumnsDtype, IndexDtype, COLUMNS_NBYTES};
 use crate::toolkit::array::AFloat;
+use crate::toolkit::convert::{from_bytes, to_bytes};
 use bytes::{Buf, BufMut};
 use numpy::ndarray::{Array1, Array2};
 use opendal::services::S3;
@@ -16,20 +17,11 @@ struct S3Client<T: AFloat> {
     phantom: PhantomData<T>,
 }
 
-fn extract_vec<T: Sized>(rv: &mut Buffer, len: usize, shape: usize) -> Vec<T> {
+fn extract_vec<T: Sized>(rv: &mut Buffer, len: usize) -> Vec<T> {
     let vec_u8 = rv.slice(..len).to_vec();
-    let vec = unsafe {
-        let vec = Vec::from_raw_parts(vec_u8.as_ptr() as *mut T, shape, shape);
-        core::mem::forget(vec_u8);
-        vec
-    };
+    let vec = from_bytes(vec_u8);
     rv.advance(len);
     vec
-}
-
-fn to_bytes<T: Sized>(slice: &[T]) -> &[u8] {
-    let len_u8 = slice.len() * core::mem::size_of::<T>();
-    unsafe { core::slice::from_raw_parts(slice.as_ptr() as *mut u8, len_u8) }
 }
 
 impl<T: AFloat> S3Client<T> {
@@ -40,22 +32,21 @@ impl<T: AFloat> S3Client<T> {
 
         let index_shape = index_len / 8;
         let columns_shape = columns_len / COLUMNS_NBYTES;
-        let values_shape = index_shape * columns_shape;
 
         let index_array = Array1::<IndexDtype>::from_shape_vec(
             (index_shape,),
-            extract_vec::<IndexDtype>(&mut rv, index_len, index_shape),
+            extract_vec::<IndexDtype>(&mut rv, index_len),
         )
         .unwrap();
         let columns_array = Array1::<ColumnsDtype>::from_shape_vec(
             (columns_shape,),
-            extract_vec::<ColumnsDtype>(&mut rv, columns_len, columns_shape),
+            extract_vec::<ColumnsDtype>(&mut rv, columns_len),
         )
         .unwrap();
         let values_len = rv.len();
         let values_array = Array2::<T>::from_shape_vec(
             (index_shape, columns_shape),
-            extract_vec::<T>(&mut rv, values_len, values_shape),
+            extract_vec::<T>(&mut rv, values_len),
         )
         .unwrap();
 
