@@ -3,6 +3,7 @@ use crate::toolkit::array::AFloat;
 use super::{ColumnsDtype, IndexDtype};
 use numpy::ndarray::{ArrayView1, ArrayView2};
 
+mod meta;
 mod ops;
 
 pub struct DataFrame<'a, T: AFloat> {
