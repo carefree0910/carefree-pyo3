@@ -21,7 +21,7 @@ impl DataFrameF64 {
         let index = self.get_index_array(py);
         let columns = self.get_columns_array(py);
         let data = self.get_data_array(py);
-        DataFrame::new(index, columns, data)
+        DataFrame::new(index.into(), columns.into(), data.into())
     }
 }
 

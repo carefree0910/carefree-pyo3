@@ -3,13 +3,13 @@ use crate::{
     df::{ColumnsDtype, IndexDtype},
     toolkit::array::AFloat,
 };
-use numpy::ndarray::{ArrayView1, ArrayView2};
+use numpy::{ndarray::CowArray, Ix1, Ix2};
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
     pub fn new(
-        index: ArrayView1<'a, IndexDtype>,
-        columns: ArrayView1<'a, ColumnsDtype>,
-        data: ArrayView2<'a, T>,
+        index: CowArray<'a, IndexDtype, Ix1>,
+        columns: CowArray<'a, ColumnsDtype, Ix1>,
+        data: CowArray<'a, T, Ix2>,
     ) -> Self {
         Self {
             index,

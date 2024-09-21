@@ -1,13 +1,13 @@
 use crate::toolkit::array::AFloat;
 
 use super::{ColumnsDtype, IndexDtype};
-use numpy::ndarray::{ArrayView1, ArrayView2};
+use numpy::{ndarray::CowArray, Ix1, Ix2};
 
 mod meta;
 mod ops;
 
 pub struct DataFrame<'a, T: AFloat> {
-    pub index: ArrayView1<'a, IndexDtype>,
-    pub columns: ArrayView1<'a, ColumnsDtype>,
-    pub data: ArrayView2<'a, T>,
+    pub index: CowArray<'a, IndexDtype, Ix1>,
+    pub columns: CowArray<'a, ColumnsDtype, Ix1>,
+    pub data: CowArray<'a, T, Ix2>,
 }
