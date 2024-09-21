@@ -1,0 +1,23 @@
+[package]
+name = "cfpyo3_rs_core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license-file.workspace = true
+
+[lib]
+name = "cfpyo3_core"
+crate-type = ["rlib"]
+
+[dependencies]
+itertools = "0.13.0"
+md-5 = "0.10.6"
+num-traits = "0.2.19"
+numpy = "0.21.0"
+rayon = "1.10.0"

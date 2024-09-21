@@ -1,4 +1,4 @@
-use super::{ColumnsDtype, IndexDtype};
+use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 

@@ -1,18 +1,18 @@
-[package]
-name = "carefree-pyo3"
+[workspace]
+members = [
+    "cfpyo3_rs_core",
+    "cfpyo3_rs_py",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.7"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[lib]
-name = "cfpyo3"
-crate-type = ["cdylib"]
-
-[dependencies]
-itertools = "0.13.0"
-md-5 = "0.10.6"
-num-traits = "0.2.19"
-numpy = "0.21.0"
-paste = "1.0.15"
-pyo3 = { version = "0.21.0", features = ["abi3-py38", "chrono", "extension-module", "multiple-pymethods"] }
-rayon = "1.10.0"
+authors = ["carefree0910 <syameimaru.saki@gmail.com>"]
+description = "a collection of performant utilities"
+homepage = "https://github.com/carefree0910/carefree-pyo3"
+repository = "https://github.com/carefree0910/carefree-pyo3"
+readme = "README.md"
+keywords = ["python", "rust", "pyo3"]
+categories = ["algorithms", "data-structures"]
+license-file = "LICENSE"

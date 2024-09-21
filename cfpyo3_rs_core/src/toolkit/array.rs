@@ -1,11 +1,15 @@
 use itertools::{enumerate, izip};
 use num_traits::{Float, FromPrimitive};
-use numpy::{
-    ndarray::{ArrayView1, ArrayView2, Axis, ScalarOperand},
-    IntoPyArray, PyArray1,
+use numpy::ndarray::{ArrayView1, ArrayView2, Axis, ScalarOperand};
+use std::{
+    cell::UnsafeCell,
+    fmt::{Debug, Display},
+    iter::zip,
+    mem,
+    ops::{AddAssign, MulAssign, SubAssign},
+    ptr,
+    thread::available_parallelism,
 };
-use pyo3::prelude::*;
-use std::{cell::UnsafeCell, iter::zip, mem, ops::AddAssign, ptr, thread::available_parallelism};
 
 #[derive(Copy, Clone)]
 pub struct UnsafeSlice<'a, T> {
@@ -51,7 +55,7 @@ fn fill_concat<D: Copy>((offsets, arrays, mut out): Task<D>) {
         out.copy_from_slice(offset, arrays[i].as_slice().unwrap());
     });
 }
-fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
+pub fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
     arrays: Vec<ArrayView2<D>>,
     num_rows: Vec<usize>,
     num_columns: usize,
@@ -128,34 +132,34 @@ fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
     }
 }
 
-macro_rules! fast_concat_2d_axis0_impl {
-    ($name:ident, $dtype:ty, $multiplier:expr) => {
-        pub fn $name<'py>(
-            py: Python<'py>,
-            arrays: Vec<ArrayView2<$dtype>>,
-        ) -> Bound<'py, PyArray1<$dtype>> {
-            let num_rows: Vec<usize> = arrays.iter().map(|a| a.shape()[0]).collect();
-            let num_columns = arrays[0].shape()[1];
-            for array in &arrays {
-                if array.shape()[1] != num_columns {
-                    panic!("all arrays should have same number of columns");
-                }
-            }
-            let num_total_rows: usize = num_rows.iter().sum();
-            let mut out: Vec<$dtype> = vec![0.; num_total_rows * num_columns];
-            let out_slice = UnsafeSlice::new(out.as_mut_slice());
-            fast_concat_2d_axis0(arrays, num_rows, num_columns, $multiplier, out_slice);
-            out.into_pyarray_bound(py)
-        }
-    };
-}
-fast_concat_2d_axis0_impl!(fast_concat_2d_axis0_f32, f32, 1);
-fast_concat_2d_axis0_impl!(fast_concat_2d_axis0_f64, f64, 2);
-
-fn mean<T>(a: ArrayView1<T>) -> T
-where
-    T: Float + AddAssign,
+pub trait AFloat:
+    Float
+    + AddAssign
+    + SubAssign
+    + MulAssign
+    + FromPrimitive
+    + ScalarOperand
+    + Send
+    + Sync
+    + Debug
+    + Display
 {
+}
+impl<T> AFloat for T where
+    T: Float
+        + AddAssign
+        + SubAssign
+        + MulAssign
+        + FromPrimitive
+        + ScalarOperand
+        + Send
+        + Sync
+        + Debug
+        + Display
+{
+}
+
+fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
     let mut sum = T::zero();
     let mut num = T::zero();
     for &x in a.iter() {
@@ -172,10 +176,7 @@ where
     }
 }
 
-fn corr<T>(a: ArrayView1<T>, b: ArrayView1<T>) -> T
-where
-    T: Float + AddAssign + FromPrimitive + ScalarOperand,
-{
+fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
     let valid_indices: Vec<usize> = zip(a.iter(), b.iter())
         .enumerate()
         .filter_map(|(i, (&x, &y))| {
@@ -201,10 +202,7 @@ where
     cov / (var1.sqrt() * var2.sqrt())
 }
 
-pub fn mean_axis1<T>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T>
-where
-    T: Float + AddAssign + FromPrimitive + Send + Sync,
-{
+pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     let pool = rayon::ThreadPoolBuilder::new()
@@ -219,10 +217,7 @@ where
     res
 }
 
-pub fn corr_axis1<T>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T>
-where
-    T: Float + AddAssign + FromPrimitive + ScalarOperand + Send + Sync,
-{
+pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     let pool = rayon::ThreadPoolBuilder::new()

@@ -1,3 +1,4 @@
+use cfpyo3_core;
 use numpy::{ndarray::ArrayView2, IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::{prelude::*, py_run};
 
@@ -25,7 +26,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let df_module = register_submodule!(rs_module, "cfpyo3._rs.df");
     let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit");
 
-    df_module.add("INDEX_CHAR_LEN", df::INDEX_CHAR_LEN)?;
+    df_module.add("INDEX_CHAR_LEN", cfpyo3_core::df::INDEX_CHAR_LEN)?;
 
     let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame");
     frame_module.add_class::<df::frame::DataFrameF64>()?;
@@ -45,7 +46,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                 ) -> Bound<'py, PyArray1<$dtype>> {
                     let a = a.as_array();
                     let num_threads = num_threads.unwrap_or(8);
-                    toolkit::array::mean_axis1(&a, num_threads).into_pyarray_bound(py)
+                    cfpyo3_core::toolkit::array::mean_axis1(&a, num_threads).into_pyarray_bound(py)
                 }
             }
             paste::item! {
@@ -59,7 +60,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let a = a.as_array();
                     let b = b.as_array();
                     let num_threads = num_threads.unwrap_or(8);
-                    toolkit::array::corr_axis1(&a, &b, num_threads).into_pyarray_bound(py)
+                    cfpyo3_core::toolkit::array::corr_axis1(&a, &b, num_threads).into_pyarray_bound(py)
                 }
             }
             paste::item! {

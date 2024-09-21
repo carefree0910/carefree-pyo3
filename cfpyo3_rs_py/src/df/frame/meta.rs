@@ -1,4 +1,6 @@
-use super::{ColumnsDtype, DataFrameF64, IndexDtype};
+use super::DataFrameF64;
+use cfpyo3_core::df::frame::DataFrame;
+use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
     PyArray1, PyArray2, PyArrayMethods,
@@ -14,6 +16,16 @@ impl DataFrameF64 {
     }
     pub fn get_data_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
         unsafe { self.data.bind(py).as_array() }
+    }
+    pub fn to_core<'a>(&'a self, py: Python<'a>) -> DataFrame<'a, f64> {
+        let index = self.get_index_array(py);
+        let columns = self.get_columns_array(py);
+        let data = self.get_data_array(py);
+        DataFrame::<f64> {
+            index,
+            columns,
+            data,
+        }
     }
 }
 
