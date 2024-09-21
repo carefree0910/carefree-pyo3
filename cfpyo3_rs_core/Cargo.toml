@@ -36,5 +36,3 @@ source-s3 = [
     "dep:opendal",
     "dep:tokio",
 ]
-bytes = ["dep:bytes"]
-once_cell = ["dep:once_cell"]
