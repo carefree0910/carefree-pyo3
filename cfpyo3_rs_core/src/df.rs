@@ -3,7 +3,7 @@ use numpy::{
     PyFixedString,
 };
 
-pub const COLUMNS_NBYTES: usize = 256;
+pub const COLUMNS_NBYTES: usize = 32;
 pub type IndexDtype = Datetime<Nanoseconds>;
 pub type ColumnsDtype = PyFixedString<COLUMNS_NBYTES>;
 
