@@ -142,8 +142,8 @@ jobs:
           name: wheel-sdist
           path: dist
 
-  release:
-    name: Release
+  release-pypi:
+    name: Release to PyPI
     runs-on: ubuntu-latest
     if: "${{ startsWith(github.ref, 'refs/tags/') }}"
     needs: [build-wheels, sdist]
@@ -156,3 +156,18 @@ jobs:
         with:
           command: upload
           args: --non-interactive --skip-existing wheel-*/*
+
+  release-crates:
+    name: Release to crates.io
+    runs-on: ubuntu-latest
+    if: "${{ startsWith(github.ref, 'refs/tags/') }}"
+    needs: [build-wheels, sdist]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniconda-version: "latest"
+          activate-environment: test
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: rustup update stable && rustup default stable
+      - run: cargo publish --manifest-path cfpyo3_rs_core/Cargo.toml --token ${{ secrets.CRATES_TOKEN }}
