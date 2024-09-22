@@ -1,6 +1,6 @@
 pub mod temporal;
 
 #[cfg(feature = "io-mem-redis")]
-pub use temporal::mem::fetchers::redis::RedisClient;
+pub use temporal::mem::redis::RedisClient;
 #[cfg(feature = "io-mem-redis")]
-pub use temporal::mem::fetchers::redis::REDIS_KEY_NBYTES;
+pub use temporal::mem::redis::REDIS_KEY_NBYTES;
