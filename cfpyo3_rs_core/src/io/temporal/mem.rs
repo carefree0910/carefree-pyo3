@@ -1060,10 +1060,9 @@ pub fn redis_grouped_sliced_column_contiguous<'a, T: AFloat>(
     let nc = multipliers.iter().sum::<i64>();
     let n_groups = redis_keys.len();
     let num_columns = columns[0].len();
-    let num_data_per_full_task = num_columns * datetime_len as usize * nc as usize;
-    let mut flattened = vec![T::zero(); bz * n_groups * num_data_per_full_task];
+    let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
+    let mut flattened = vec![T::zero(); bz * num_data_per_batch];
     let flattened_slice = flattened.as_mut_slice();
-    // here, we separate a full task into small tasks to fully utilize the multi-threading.
     let num_columns_per_task = (num_columns / 200).max(10.min(num_columns));
     let num_columns_task = num_columns / num_columns_per_task;
     let num_tasks = bz * n_groups * num_columns_task;
@@ -1093,7 +1092,7 @@ pub fn redis_grouped_sliced_column_contiguous<'a, T: AFloat>(
                 .for_each(|(b, &datetime_start)| {
                     let datetime_end = datetime_end[b];
                     let columns = columns[b];
-                    let offset = b * num_data_per_full_task;
+                    let offset = b * num_data_per_batch;
                     (0..num_columns_task).for_each(|n| {
                         let column_start = n * num_columns_per_task;
                         let column_end = if n == num_columns_task - 1 {
@@ -1114,7 +1113,7 @@ pub fn redis_grouped_sliced_column_contiguous<'a, T: AFloat>(
                                 date_columns_offset,
                                 columns_getter,
                                 RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
-                                &mut flattened_slice.slice(offset, offset + num_data_per_full_task),
+                                &mut flattened_slice.slice(offset, offset + num_data_per_batch),
                                 Some(multiplier),
                                 Some(Offsets {
                                     column_offset: column_start as i64,
