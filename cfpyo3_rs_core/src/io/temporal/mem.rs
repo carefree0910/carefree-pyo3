@@ -602,3 +602,361 @@ pub async fn async_column_contiguous<'a, T, F0, F1>(
     }
 }
 
+// public interfaces
+
+/// random-fetching temporal data with row-contiguous compact data & compact columns.
+///
+/// # constants
+///
+/// - `Nd`: total number of the dates
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
+/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - `datetime_start` - the start of the datetime range to fetch.
+/// - `datetime_end` - the end of the datetime range to fetch.
+/// - `datetime_len` - the length of the datetime range to fetch.
+/// - `columns` - the columns to fetch.
+/// - `num_ticks_per_day` - equals to `T`.
+/// - `full_index` - the full datetime index.
+/// - `time_idx_to_date_idx` (`N * Nd`) - the mapping from time index to date index.
+/// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - `compact_columns` (`S`) - the full, compact columns.
+/// - `compact_data` (`T * S`) - the full, compact data.
+pub fn shm_row_contiguous<T: AFloat>(
+    datetime_start: i64,
+    datetime_end: i64,
+    datetime_len: i64,
+    columns: &ArrayView1<i64>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<i64>,
+    time_idx_to_date_idx: &ArrayView1<i64>,
+    date_columns_offset: &ArrayView1<i64>,
+    compact_columns: &ArrayView1<i64>,
+    compact_data: &ArrayView1<T>,
+) -> Vec<T> {
+    let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
+    let flattened_slice = flattened.as_mut_slice();
+    row_contiguous(
+        datetime_start,
+        datetime_end,
+        datetime_len,
+        columns,
+        num_ticks_per_day,
+        full_index,
+        time_idx_to_date_idx,
+        date_columns_offset,
+        |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        |start_idx, end_idx| compact_data.slice(s![start_idx as isize..end_idx as isize]),
+        flattened_slice,
+    );
+    flattened
+}
+
+/// random-fetching temporal data with column contiguous compact data & compact columns.
+///
+/// # constants
+///
+/// - `Nd`: total number of the dates
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
+/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - `datetime_start` - the start of the datetime range to fetch.
+/// - `datetime_end` - the end of the datetime range to fetch.
+/// - `datetime_len` - the length of the datetime range to fetch.
+/// - `columns` - the columns to fetch.
+/// - `num_ticks_per_day` - equals to `T`.
+/// - `full_index` - the full datetime index.
+/// - `time_idx_to_date_idx` (`N * Nd`) - the mapping from time index to date index.
+/// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - `compact_columns` (`S`) - the full, compact columns.
+/// - `compact_data` (`T * S`) - the full, compact data.
+pub fn shm_column_contiguous<'a, T: AFloat>(
+    datetime_start: i64,
+    datetime_end: i64,
+    datetime_len: i64,
+    columns: &ArrayView1<i64>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<i64>,
+    time_idx_to_date_idx: &ArrayView1<i64>,
+    date_columns_offset: &ArrayView1<i64>,
+    compact_columns: &ArrayView1<i64>,
+    compact_data: &'a ArrayView1<'a, T>,
+) -> Vec<T> {
+    let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
+    let flattened_slice = flattened.as_mut_slice();
+    column_contiguous(
+        None,
+        datetime_start,
+        datetime_end,
+        datetime_len,
+        columns,
+        num_ticks_per_day,
+        full_index,
+        time_idx_to_date_idx,
+        date_columns_offset,
+        |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        SHMFetcher::new(compact_data),
+        &mut UnsafeSlice::new(flattened_slice),
+        None,
+        None,
+    );
+    flattened
+}
+
+/// a batched version of `shm_column_contiguous`.
+pub fn shm_batch_column_contiguous<'a, T: AFloat>(
+    datetime_start: &Vec<i64>,
+    datetime_end: &Vec<i64>,
+    datetime_len: i64,
+    columns: &Vec<&ArrayView1<i64>>,
+    num_ticks_per_day: i64,
+    full_index: &Vec<&ArrayView1<i64>>,
+    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
+    date_columns_offset: &Vec<&ArrayView1<i64>>,
+    compact_columns: &Vec<&ArrayView1<i64>>,
+    compact_data: &Vec<&'a ArrayView1<'a, T>>,
+    num_threads: usize,
+) -> Vec<T> {
+    let nc = compact_data.len();
+    let num_data_per_task = datetime_len as usize * columns[0].len();
+    let num_tasks = datetime_start.len() * nc;
+    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
+    let flattened_slice = flattened.as_mut_slice();
+    let num_threads = num_threads.min(num_tasks);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(move |s| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        compact_data
+            .iter()
+            .enumerate()
+            .for_each(|(c, compact_data)| {
+                let full_index = full_index[c];
+                let time_idx_to_date_idx = time_idx_to_date_idx[c];
+                let date_columns_offset = date_columns_offset[c];
+                let compact_columns = compact_columns[c];
+                let columns_getter = |start_idx: i64, end_idx: i64| {
+                    compact_columns.slice(s![start_idx as isize..end_idx as isize])
+                };
+                datetime_start
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, &datetime_start)| {
+                        let datetime_end = datetime_end[i];
+                        let columns = columns[i];
+                        let offset = (i * nc + c) * num_data_per_task;
+                        s.spawn(move |_| {
+                            let data_getter = SHMFetcher::new(compact_data);
+                            column_contiguous(
+                                Some(c),
+                                datetime_start,
+                                datetime_end,
+                                datetime_len,
+                                columns,
+                                num_ticks_per_day,
+                                full_index,
+                                time_idx_to_date_idx,
+                                date_columns_offset,
+                                columns_getter,
+                                data_getter,
+                                &mut flattened_slice.slice(offset, offset + num_data_per_task),
+                                None,
+                                None,
+                            );
+                        });
+                    })
+            });
+    });
+    flattened
+}
+
+/// random-fetching time-series data with column contiguous sliced data & compact columns.
+///
+/// # constants
+///
+/// - `Nd`: total number of the dates
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
+/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - `datetime_start` - the start of the datetime range to fetch.
+/// - `datetime_end` - the end of the datetime range to fetch.
+/// - `datetime_len` - the length of the datetime range to fetch.
+/// - `columns` - the columns to fetch.
+/// - `num_ticks_per_day` - equals to `T`.
+/// - `full_index` - the full datetime index.
+/// - `time_idx_to_date_idx` (`N * Nd`) - the mapping from time index to date index.
+/// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - `compact_columns` (`S`) - the full, compact columns.
+/// - `sliced_data` - the sliced data, each slice contains the flattened data of each date.
+pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
+    datetime_start: i64,
+    datetime_end: i64,
+    datetime_len: i64,
+    columns: &ArrayView1<i64>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<i64>,
+    time_idx_to_date_idx: &ArrayView1<i64>,
+    date_columns_offset: &ArrayView1<i64>,
+    compact_columns: &ArrayView1<i64>,
+    sliced_data: &'a Vec<&'a ArrayView1<'a, T>>,
+    multiplier: Option<i64>,
+) -> Vec<T> {
+    let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
+    let flattened_slice = flattened.as_mut_slice();
+    column_contiguous(
+        None,
+        datetime_start,
+        datetime_end,
+        datetime_len,
+        columns,
+        num_ticks_per_day,
+        full_index,
+        time_idx_to_date_idx,
+        date_columns_offset,
+        |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        SlicedSHMFetcher::new(sliced_data, multiplier),
+        &mut UnsafeSlice::new(flattened_slice),
+        multiplier,
+        None,
+    );
+    flattened
+}
+
+/// a batched version of `shm_sliced_column_contiguous`.
+pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
+    datetime_start: &Vec<i64>,
+    datetime_end: &Vec<i64>,
+    datetime_len: i64,
+    columns: &Vec<&ArrayView1<i64>>,
+    num_ticks_per_day: i64,
+    full_index: &Vec<&ArrayView1<i64>>,
+    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
+    date_columns_offset: &Vec<&ArrayView1<i64>>,
+    compact_columns: &Vec<&ArrayView1<i64>>,
+    sliced_data: &'a Vec<&Vec<&'a ArrayView1<'a, T>>>,
+    num_threads: usize,
+) -> Vec<T> {
+    let nc = sliced_data.len();
+    let num_data_per_task = datetime_len as usize * columns[0].len();
+    let num_tasks = datetime_start.len() * nc;
+    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
+    let flattened_slice = flattened.as_mut_slice();
+    let num_threads = num_threads.min(num_tasks);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(move |s| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        sliced_data.iter().enumerate().for_each(|(c, sliced_data)| {
+            let full_index = full_index[c];
+            let time_idx_to_date_idx = time_idx_to_date_idx[c];
+            let date_columns_offset = date_columns_offset[c];
+            let compact_columns = compact_columns[c];
+            let columns_getter = |start_idx: i64, end_idx: i64| {
+                compact_columns.slice(s![start_idx as isize..end_idx as isize])
+            };
+            datetime_start
+                .iter()
+                .enumerate()
+                .for_each(|(i, &datetime_start)| {
+                    let datetime_end = datetime_end[i];
+                    let columns = columns[i];
+                    let offset = (i * nc + c) * num_data_per_task;
+                    s.spawn(move |_| {
+                        let data_getter = SlicedSHMFetcher::new(sliced_data, None);
+                        column_contiguous(
+                            Some(c),
+                            datetime_start,
+                            datetime_end,
+                            datetime_len,
+                            columns,
+                            num_ticks_per_day,
+                            full_index,
+                            time_idx_to_date_idx,
+                            date_columns_offset,
+                            columns_getter,
+                            data_getter,
+                            &mut flattened_slice.slice(offset, offset + num_data_per_task),
+                            None,
+                            None,
+                        );
+                    });
+                })
+        });
+    });
+    flattened
+}
+
+/// a batched & grouped version of `shm_sliced_column_contiguous`.
+pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
+    datetime_start: &Vec<i64>,
+    datetime_end: &Vec<i64>,
+    datetime_len: i64,
+    columns: &Vec<&ArrayView1<i64>>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<i64>,
+    time_idx_to_date_idx: &ArrayView1<i64>,
+    date_columns_offset: &ArrayView1<i64>,
+    compact_columns: &ArrayView1<i64>,
+    sliced_data: &'a Vec<&'a ArrayView1<'a, T>>,
+    num_threads: usize,
+    num_groups: i64,
+) -> Vec<T> {
+    let num_data_per_task = columns[0].len() * datetime_len as usize * num_groups as usize;
+    let num_tasks = datetime_start.len();
+    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
+    let flattened_slice = flattened.as_mut_slice();
+    let num_threads = num_threads.min(num_tasks);
+    let multiplier = Some(num_groups);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(move |s| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        let columns_getter = |start_idx: i64, end_idx: i64| {
+            compact_columns.slice(s![start_idx as isize..end_idx as isize])
+        };
+        datetime_start
+            .iter()
+            .enumerate()
+            .for_each(|(i, &datetime_start)| {
+                let datetime_end = datetime_end[i];
+                let columns = columns[i];
+                let offset = i * num_data_per_task;
+                s.spawn(move |_| {
+                    let data_getter = SlicedSHMFetcher::new(sliced_data, multiplier);
+                    column_contiguous(
+                        None,
+                        datetime_start,
+                        datetime_end,
+                        datetime_len,
+                        columns,
+                        num_ticks_per_day,
+                        full_index,
+                        time_idx_to_date_idx,
+                        date_columns_offset,
+                        columns_getter,
+                        data_getter,
+                        &mut flattened_slice.slice(offset, offset + num_data_per_task),
+                        multiplier,
+                        None,
+                    );
+                });
+            })
+    });
+    flattened
+}
+

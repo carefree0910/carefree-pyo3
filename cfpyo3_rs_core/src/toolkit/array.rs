@@ -29,6 +29,12 @@ impl<'a, T> UnsafeSlice<'a, T> {
         Self { slice: self.slice }
     }
 
+    pub fn slice(&self, start: usize, end: usize) -> Self {
+        Self {
+            slice: &self.slice[start..end],
+        }
+    }
+
     pub fn set(&mut self, i: usize, value: T) {
         let ptr = self.slice[i].get();
         unsafe {

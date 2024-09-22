@@ -15,6 +15,8 @@ use crate::toolkit::array::AFloat;
 use numpy::{ndarray::CowArray, Ix1};
 use std::future::Future;
 
+pub mod shm;
+
 /// arguments for the `Fetcher::fetch` method
 ///
 /// # concepts
