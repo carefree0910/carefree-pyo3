@@ -86,6 +86,9 @@ jobs:
           - stable
           - beta
           - nightly
+        features:
+          - "full"
+          - "bench-full"
     steps:
       - uses: actions/checkout@v4
       - uses: conda-incubator/setup-miniconda@v2
@@ -94,7 +97,7 @@ jobs:
           activate-environment: test
           python-version: ${{ env.PYTHON_VERSION }}
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo test --workspace --exclude cfpyo3_rs_py --verbose
+      - run: cargo test --workspace --exclude cfpyo3_rs_py -F ${{ matrix.features }} --verbose
 
   build-wheels:
     needs: [test-py, test-rs]
