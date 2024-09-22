@@ -63,6 +63,18 @@ fn roll_pool_idx(cursor: &Mutex<Cursor>, pool: &Vec<Option<Mutex<ClusterConnecti
 }
 
 impl<T: AFloat> RedisClient<T> {
+    pub fn new() -> Self {
+        Self {
+            cursor: Mutex::new(Cursor(0)),
+            cluster: None,
+            conn_pool: None,
+            warmed_up: false,
+            phantom: PhantomData::<T>,
+            #[cfg(feature = "bench-io-mem-redis")]
+            trackers: Trackers::new(0),
+        }
+    }
+
     pub fn reset(&mut self, urls: Vec<String>, pool_size: usize, reconnect: bool) {
         if reconnect || self.cluster.is_none() {
             self.cluster = Some(init_client(urls));
