@@ -823,7 +823,8 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
     sliced_data: &'a Vec<&'a ArrayView1<'a, T>>,
     multiplier: Option<i64>,
 ) -> Vec<T> {
-    let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
+    let mut flattened =
+        vec![T::zero(); datetime_len as usize * columns.len() * multiplier.unwrap_or(1) as usize];
     let flattened_slice = flattened.as_mut_slice();
     column_contiguous(
         None,
