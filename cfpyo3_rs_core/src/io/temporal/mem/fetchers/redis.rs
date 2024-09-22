@@ -63,7 +63,7 @@ fn roll_pool_idx(cursor: &Mutex<Cursor>, pool: &Vec<Option<Mutex<ClusterConnecti
 }
 
 impl<T: AFloat> RedisClient<T> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             cursor: Mutex::new(Cursor(0)),
             cluster: None,
