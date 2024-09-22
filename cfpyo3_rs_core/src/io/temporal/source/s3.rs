@@ -19,7 +19,7 @@ struct S3Client<T: AFloat> {
 
 fn extract_vec<T: Sized>(rv: &mut Buffer, nbytes: usize) -> Vec<T> {
     let vec_u8 = rv.slice(..nbytes).to_vec();
-    let vec = from_bytes(vec_u8);
+    let vec = unsafe { from_bytes(vec_u8) };
     rv.advance(nbytes);
     vec
 }
@@ -67,9 +67,11 @@ impl<T: AFloat> S3Client<T> {
         let mut bytes: Vec<u8> = Vec::with_capacity(total_nbytes + 16);
         bytes.put_i64(index_nbytes as i64);
         bytes.put_i64(columns_nbytes as i64);
-        bytes.put_slice(to_bytes(index.as_slice().unwrap()));
-        bytes.put_slice(to_bytes(columns.as_slice().unwrap()));
-        bytes.put_slice(to_bytes(values.as_slice().unwrap()));
+        unsafe {
+            bytes.put_slice(to_bytes(index.as_slice().unwrap()));
+            bytes.put_slice(to_bytes(columns.as_slice().unwrap()));
+            bytes.put_slice(to_bytes(values.as_slice().unwrap()));
+        }
         self.op.write(key, bytes).await
     }
 }
