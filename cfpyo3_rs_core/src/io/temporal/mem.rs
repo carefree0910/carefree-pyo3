@@ -129,6 +129,8 @@ pub fn row_contiguous<'a, T, F0, F1>(
             let date_offset = (time_start_idx % num_ticks_per_day) * num_columns_per_day[0];
             offset_before + date_offset
         };
+
+        #[inline(always)]
         fn fill_data<'a, T: AFloat>(
             time_idx: i64,
             column_idx: usize,
