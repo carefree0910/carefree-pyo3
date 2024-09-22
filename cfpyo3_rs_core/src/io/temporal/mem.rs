@@ -166,6 +166,15 @@ pub fn row_contiguous<'a, T, F0, F1>(
                         if date_columns[corrected_idx as usize] == columns[i] {
                             let i_selected_data = selected_data.row(idx as usize);
                             fill_data(time_idx, i, i_selected_data, flattened, num_columns)
+                        } else {
+                            let nan_data = vec![T::nan(); date_count as usize];
+                            fill_data(
+                                time_idx,
+                                i,
+                                ArrayView1::from_shape(date_count as usize, &nan_data).unwrap(),
+                                flattened,
+                                num_columns,
+                            )
                         }
                     });
                 cursor = cursor_end;
