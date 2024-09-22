@@ -41,3 +41,12 @@ io-mem-redis = [
 bench-io-mem-redis = [
     "io-mem-redis",
 ]
+
+full = [
+    "io-source-s3",
+    "io-mem-redis",
+]
+bench-full = [
+    "full",
+    "bench-io-mem-redis",
+]
