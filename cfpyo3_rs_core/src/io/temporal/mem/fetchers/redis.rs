@@ -158,7 +158,7 @@ impl<T: AFloat> RedisClient<T> {
                 let ranges_str: Vec<String> = zip(start_indices, end_indices)
                     .map(|(start, end)| format!("{}-{}", start, end))
                     .collect();
-                let rv = {
+                let rv: Vec<Vec<u8>> = {
                     let idx = roll_pool_idx(&self.cursor, pool);
                     let mut conn = pool[idx].as_ref().unwrap().lock().unwrap();
                     #[cfg(feature = "bench-io-mem-redis")]
