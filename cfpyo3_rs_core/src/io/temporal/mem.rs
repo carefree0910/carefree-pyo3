@@ -974,7 +974,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
 
 /// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
 #[cfg(feature = "io-mem-redis")]
-pub fn redis_sliced_column_contiguous<'a, T: AFloat>(
+pub fn redis_column_contiguous<'a, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
@@ -1039,9 +1039,9 @@ pub fn redis_sliced_column_contiguous<'a, T: AFloat>(
     flattened
 }
 
-/// a grouped version of `redis_sliced_column_contiguous`.
+/// a grouped version of `redis_column_contiguous`.
 #[cfg(feature = "io-mem-redis")]
-pub fn redis_grouped_sliced_column_contiguous<'a, T: AFloat>(
+pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
