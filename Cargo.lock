@@ -145,7 +145,6 @@ dependencies = [
  "md-5",
  "num-traits",
  "numpy",
- "once_cell",
  "opendal",
  "rayon",
  "tokio",
