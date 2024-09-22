@@ -17,36 +17,36 @@ struct S3Client<T: AFloat> {
     phantom: PhantomData<T>,
 }
 
-fn extract_vec<T: Sized>(rv: &mut Buffer, len: usize) -> Vec<T> {
-    let vec_u8 = rv.slice(..len).to_vec();
+fn extract_vec<T: Sized>(rv: &mut Buffer, nbytes: usize) -> Vec<T> {
+    let vec_u8 = rv.slice(..nbytes).to_vec();
     let vec = from_bytes(vec_u8);
-    rv.advance(len);
+    rv.advance(nbytes);
     vec
 }
 
 impl<T: AFloat> S3Client<T> {
     pub async fn read(&self, key: &str) -> Result<DataFrame<T>> {
         let mut rv = self.op.read(key).await?;
-        let index_len = rv.get_i64() as usize;
-        let columns_len = rv.get_i64() as usize;
+        let index_nbytes = rv.get_i64() as usize;
+        let columns_nbytes = rv.get_i64() as usize;
 
-        let index_shape = index_len / 8;
-        let columns_shape = columns_len / COLUMNS_NBYTES;
+        let index_shape = index_nbytes / 8;
+        let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
         let index_array = Array1::<IndexDtype>::from_shape_vec(
             (index_shape,),
-            extract_vec::<IndexDtype>(&mut rv, index_len),
+            extract_vec::<IndexDtype>(&mut rv, index_nbytes),
         )
         .unwrap();
         let columns_array = Array1::<ColumnsDtype>::from_shape_vec(
             (columns_shape,),
-            extract_vec::<ColumnsDtype>(&mut rv, columns_len),
+            extract_vec::<ColumnsDtype>(&mut rv, columns_nbytes),
         )
         .unwrap();
-        let values_len = rv.len();
+        let values_nbytes = rv.len();
         let values_array = Array2::<T>::from_shape_vec(
             (index_shape, columns_shape),
-            extract_vec::<T>(&mut rv, values_len),
+            extract_vec::<T>(&mut rv, values_nbytes),
         )
         .unwrap();
 
@@ -61,12 +61,12 @@ impl<T: AFloat> S3Client<T> {
         let index = &df.index;
         let columns = &df.columns;
         let values = &df.data;
-        let index_len = index.len() * 8;
-        let columns_len = columns.len() * COLUMNS_NBYTES;
-        let total_bytes = index_len + columns_len + values.len() * 8;
-        let mut bytes: Vec<u8> = Vec::with_capacity(total_bytes + 16);
-        bytes.put_i64(index_len as i64);
-        bytes.put_i64(columns_len as i64);
+        let index_nbytes = index.len() * 8;
+        let columns_nbytes = columns.len() * COLUMNS_NBYTES;
+        let total_nbytes = index_nbytes + columns_nbytes + values.len() * 8;
+        let mut bytes: Vec<u8> = Vec::with_capacity(total_nbytes + 16);
+        bytes.put_i64(index_nbytes as i64);
+        bytes.put_i64(columns_nbytes as i64);
         bytes.put_slice(to_bytes(index.as_slice().unwrap()));
         bytes.put_slice(to_bytes(columns.as_slice().unwrap()));
         bytes.put_slice(to_bytes(values.as_slice().unwrap()));
