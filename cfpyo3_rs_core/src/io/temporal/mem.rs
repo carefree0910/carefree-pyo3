@@ -1,0 +1,604 @@
+//! # io/temporal/mem
+//!
+//! this module aims to accelerate 'random-fetching' of temporal data stored in 'memory'.
+//!
+//! 'memory' here refers to an implementation which can access the data 'quickly'. it
+//! does not necessarily mean that the data is stored in the RAM.
+//!
+//! but of course, we support fetching data from RAM. in this case, we suggest storing the
+//! data in shared memory (SHM) to save memory copy time on the user side.
+//!
+//! > that's also why some public interfaces start with `shm`.
+//!
+//! the general workflow of a complete mem-data fetching process is as follows:
+//! 1. determine a data fetching schema based on the format of the underlying mem-data
+//! (e.g., row-contiguous or column-contiguous)
+//! 2. separate the final task into tiny tasks, each of which will fetch a small slice of data
+//! > the 'slice' here indicates a continuous piece of data laid out in memory
+//! 3. create a `Fetcher` for each tiny task
+//!
+//! this module focuses on the first two steps, and the final step is implemented in `./fetchers`.
+
+use crate::toolkit::array::{AFloat, UnsafeSlice};
+use fetchers::{
+    shm::{SHMFetcher, SlicedSHMFetcher},
+    AsyncFetcher, Fetcher, FetcherArgs,
+};
+use numpy::ndarray::{s, Array1, ArrayView1};
+use std::{collections::HashMap, iter::zip};
+
+#[cfg(feature = "io-mem-redis")]
+use fetchers::redis::{RedisClient, RedisFetcher, RedisGroupedFetcher, RedisKey};
+
+pub mod fetchers;
+
+// core implementations
+
+fn searchsorted(arr: &ArrayView1<i64>, value: i64) -> i64 {
+    arr.as_slice()
+        .unwrap()
+        .binary_search(&value)
+        .unwrap_or_else(|x| x) as i64
+}
+
+fn searchsorted_array(arr: &ArrayView1<i64>, values: &ArrayView1<i64>) -> Array1<i64> {
+    let mut result = Vec::with_capacity(values.len());
+    values
+        .iter()
+        .map(|&value| searchsorted(arr, value))
+        .for_each(|x| result.push(x));
+    Array1::from(result)
+}
+
+fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
+    let mut counts = HashMap::new();
+
+    for &value in arr.iter() {
+        *counts.entry(value).or_insert(0) += 1;
+    }
+
+    let mut unique_values: Vec<i64> = counts.keys().cloned().collect();
+    unique_values.sort_by(|a, b| a.cmp(b));
+
+    let counts: Vec<i64> = unique_values.iter().map(|&value| counts[&value]).collect();
+
+    return (Array1::from(unique_values), Array1::from(counts));
+}
+
+/// a typically useful function for random-fetching temporal row-contiguous data.
+///
+/// # constants
+///
+/// - `Nd`: total number of the dates
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
+/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - `datetime_start` - the start of the datetime range to fetch.
+/// - `datetime_end` - the end of the datetime range to fetch.
+/// - `datetime_len` - the length of the datetime range to fetch.
+/// - `columns` - the columns to fetch.
+/// - `num_ticks_per_day` - equals to `T`.
+/// - `full_index` - the full datetime index.
+/// - `time_idx_to_date_idx` (`N * Nd`) - the mapping from time index to date index.
+/// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - `columns_getter` - the getter function for columns, args: `(start_idx, end_idx)`.
+/// - `data_getter` - the getter function for data, args: `(start_idx, end_idx)`.
+/// - `flattened` (`datetime_len * columns.len()`) - the flattened array to fill.
+///
+/// # notes
+///
+/// this function is not very practical to use, so we are not utilizing the `fetcher` module for simplicity.
+pub fn row_contiguous<'a, T, F0, F1>(
+    datetime_start: i64,
+    datetime_end: i64,
+    datetime_len: i64,
+    columns: &ArrayView1<i64>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<i64>,
+    time_idx_to_date_idx: &ArrayView1<i64>,
+    date_columns_offset: &ArrayView1<i64>,
+    columns_getter: F0,
+    data_getter: F1,
+    flattened: &mut [T],
+) where
+    T: AFloat,
+    F0: Fn(i64, i64) -> ArrayView1<'a, i64>,
+    F1: Fn(i64, i64) -> ArrayView1<'a, T>,
+{
+    let time_start_idx = searchsorted(full_index, datetime_start);
+    let time_end_idx = time_start_idx + datetime_len - 1;
+    if full_index[time_end_idx as usize] != datetime_end {
+        panic!("`datetime_index` is not continuous")
+    } else {
+        let date_idxs =
+            time_idx_to_date_idx.slice(s![time_start_idx as isize..=time_end_idx as isize]);
+        let (unique_date_idxs, date_counts) = unique(&date_idxs);
+        let columns_per_day = Vec::from_iter(unique_date_idxs.iter().map(|&date_idx| {
+            let start_idx = date_columns_offset[date_idx as usize];
+            let end_idx = date_columns_offset[(date_idx + 1) as usize];
+            return columns_getter(start_idx, end_idx);
+        }));
+        let num_columns_per_day = Array1::from_iter(columns_per_day.iter().map(|x| x.len() as i64));
+        let num_columns = columns.len();
+        let start_idx = {
+            let offset_before =
+                date_columns_offset[unique_date_idxs[0] as usize] * num_ticks_per_day;
+            let date_offset = (time_start_idx % num_ticks_per_day) * num_columns_per_day[0];
+            offset_before + date_offset
+        };
+        fn fill_data<'a, T: AFloat>(
+            time_idx: i64,
+            column_idx: usize,
+            data: ArrayView1<'a, T>,
+            flattened: &mut [T],
+            num_columns: usize,
+        ) {
+            data.iter().enumerate().for_each(|(i, &x)| {
+                flattened[(time_idx as usize + i) * num_columns + column_idx] = x
+            });
+        }
+
+        let mut cursor: i64 = 0;
+        let mut time_idx: i64 = 0;
+        zip(date_counts, columns_per_day)
+            .map(|(date_count, date_columns)| {
+                let columns_len = date_columns.len() as i64;
+                let cursor_end = cursor + date_count * columns_len;
+                let time_idx_end = time_idx + date_count;
+                let columns_idx = searchsorted_array(&date_columns.view(), columns);
+                let columns_idx = columns_idx.into_raw_vec();
+                let mut corrected_columns_idx = columns_idx.clone();
+                columns_idx.iter().enumerate().for_each(|(i, &column_idx)| {
+                    if column_idx >= columns_len {
+                        corrected_columns_idx[i] = 0;
+                    }
+                });
+                let selected_data = data_getter(start_idx + cursor, start_idx + cursor_end)
+                    .into_shape((date_count as usize, columns_len as usize))
+                    .unwrap();
+                let selected_data = selected_data.t();
+                zip(corrected_columns_idx, columns_idx)
+                    .enumerate()
+                    .for_each(|(i, (corrected_idx, idx))| {
+                        if date_columns[corrected_idx as usize] == columns[i] {
+                            let i_selected_data = selected_data.row(idx as usize);
+                            fill_data(time_idx, i, i_selected_data, flattened, num_columns)
+                        }
+                    });
+                cursor = cursor_end;
+                time_idx = time_idx_end;
+            })
+            .for_each(drop);
+    }
+}
+
+/// a struct that represents the offsets for each data item at the 'channel' dimension.
+///
+/// # `column_offset` concept
+///
+/// typically, we will spawn tasks among two dimensions: batch size (`B`) and number of features (`C`).
+/// but when the features are aggregated, the feature dimension (or, the 'channel' dimension) will be
+/// reduced by a factor of `Ck`, where `Ck` is the number of features in each aggregate, and will become
+/// the `multiplier` argument.
+///
+/// since `Ck` is often ≥ 50, we will need to seek new ways to increase the number of tasks to be spawned
+/// in order to fully utilize the CPU. hence, we breaks the columns (`N`) into `Nk` groups to balance
+/// the situation.
+///
+/// in this case, `column_offset` will be important, as it tells us in which column group the current
+/// fetcher is in.
+///
+/// for example, with the above annotations, if the current fetcher is in the `n`th group, then the
+/// `column_offset` should be `n * N / Nk`
+///
+/// # `channel_pad_start/end` concepts
+///
+/// a data item is typically a single fp32, so the data we fetched from the `Fetcher` looks like:
+///
+/// [i0, i1, i2, i3, i4, ..., iN]
+///
+/// and a typical scenario is that we fetch multiple data, and stack them together to become a 2D array:
+///
+/// [i0_0, i1_0, i2_0, i3_0, i4_0, ..., iN_0,
+///  i0_1, i1_1, i2_1, i3_1, i4_1, ..., iN_1,
+///  ...,
+///  i0_C, i1_C, i2_C, i3_C, i4_C, ..., iN_C]
+///
+/// > notice that we use 'stack' / '2D' just for illustration, the actual implementation will
+/// > manipulate the data in '1D', zero copy way.
+///
+/// here, `C` is the number of 'channels' that we want to fetch.
+///
+/// however, if we want to fetch more contiguous data at once, we can aggregate multiple data items
+/// among the channel dimension, and treat them as one. in this case, the data we fetched from the
+/// `Fetcher` will look like:
+///
+/// [(i00, i01, ..., i0k), (i10, i11, ..., i1k), ..., (iN0, iN1, ..., iNk)]
+///
+/// where `k` is the `multiplier` for each data item.
+///
+/// > notice that the parentheses do not actually exist in the data, they are just showing that we
+/// > treat `k` data items as one.
+///
+/// plus, if we have multiple aggregates, we need to stack them together along the channel dimension.
+/// consider we have 3 aggregates, each aggregates p, q, r data items, then the data we fetched will look like:
+///
+/// [(i00, i01, ..., i0p), (i10, i11, ..., i1p), ..., (iN0, iN1, ..., iNp)]
+/// [(j00, j01, ..., j0q), (j10, j11, ..., j1q), ..., (jN0, jN1, ..., jNq)]
+/// [(k00, k01, ..., k0r), (k10, k11, ..., k1r), ..., (kN0, kN1, ..., kNr)]
+///
+/// > notice that p+q+r=C.
+///
+/// now, we want to stack them into the final 2D array:
+///
+/// [i00, i10, i20, ..., iN0
+///  i01, i11, i21, ..., iN1
+///  ...,
+///  i0p, i1p, i2p, ..., iNp,
+///  j00, j10, j20, ..., jN0,
+///  j01, j11, j21, ..., jN1,
+///  ...,
+///  j0q, j1q, j2q, ..., jNq,
+///  ...,
+///  k0r, k1r, k2r, ..., kNr]
+///
+/// so you will notice that in order to fill those data into the 2D array, we need to know
+/// the 'position' of the current data in each 'column' - or precisely, the 'channel'. that's
+/// why we need the `channel_pad_start` and `channel_pad_end`.
+///
+/// in the above example, the `channel_pad_start` and `channel_pad_end` of each data will be:
+///
+/// - (0, q+r) for `i`
+/// - (p, r) for `j`
+/// - (p+q, 0) for `k`
+///
+#[derive(Default)]
+pub struct Offsets {
+    column_offset: i64,
+    channel_pad_start: i64,
+    channel_pad_end: i64,
+}
+
+/// a typically useful function for random-fetching temporal column-contiguous data.
+///
+/// # constants
+///
+/// - `Nd`: total number of the dates
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
+/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - `c` - the index of the current fetcher among all fetchers in a batch get mode.
+/// > if not in batch get mode, this field should be `None`.
+/// - `datetime_start` - the start of the datetime range to fetch.
+/// - `datetime_end` - the end of the datetime range to fetch.
+/// - `datetime_len` - the length of the datetime range to fetch.
+/// - `columns` - the columns to fetch.
+/// - `num_ticks_per_day` - equals to `T`.
+/// - `full_index` - the full datetime index.
+/// - `time_idx_to_date_idx` (`N * Nd`) - the mapping from time index to date index.
+/// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - `columns_getter` - the getter function for columns, args: `(start_idx, end_idx)`.
+/// - `data_getter` - the getter function for data, args: `(start_idx, end_idx)`.
+/// - `flattened` (`datetime_len * columns.len()`) - the flattened array to fill.
+/// - `multiplier` - the multiplier for each data item. normally, a data item is a simple fp32,
+///   but in certain cases, we will aggregate multiple data items and treat them as one to enable
+///   the possibility of fetching more contiguous data at once. in this case, we need to know the
+///   multiplier to correctly fill the `flattened` array.
+/// - `offsets` - the offsets for each data item, see documentation for `Offsets`.
+pub fn column_contiguous<'a, T, F0, F1>(
+    c: Option<usize>,
+    datetime_start: i64,
+    datetime_end: i64,
+    datetime_len: i64,
+    columns: &ArrayView1<i64>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<i64>,
+    time_idx_to_date_idx: &ArrayView1<i64>,
+    date_columns_offset: &ArrayView1<i64>,
+    columns_getter: F0,
+    data_getter: F1,
+    flattened: &mut UnsafeSlice<T>,
+    multiplier: Option<i64>,
+    offsets: Option<Offsets>,
+) where
+    T: AFloat,
+    F0: Fn(i64, i64) -> ArrayView1<'a, i64>,
+    F1: Fetcher<T>,
+{
+    let time_start_idx = searchsorted(full_index, datetime_start);
+    let time_end_idx = time_start_idx + datetime_len - 1;
+    if full_index[time_end_idx as usize] != datetime_end {
+        panic!("`datetime_index` is not continuous")
+    } else {
+        let start_date_idx = time_idx_to_date_idx[time_start_idx as usize];
+        let end_date_idx = time_idx_to_date_idx[time_end_idx as usize];
+        let start_idx = date_columns_offset[start_date_idx as usize] * num_ticks_per_day;
+        let unique_date_idxs = Vec::from_iter(start_date_idx..=end_date_idx);
+        let columns_per_day = Vec::from_iter(unique_date_idxs.iter().map(|&date_idx| {
+            let start_idx = date_columns_offset[date_idx as usize];
+            let end_idx = date_columns_offset[(date_idx + 1) as usize];
+            return columns_getter(start_idx, end_idx);
+        }));
+        let num_columns_per_day: Vec<i64> =
+            columns_per_day.iter().map(|x| x.len() as i64).collect();
+        let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match offsets {
+            None => flattened.copy_from_slice(f_start_idx, data_slice),
+            Some(Offsets {
+                channel_pad_start,
+                channel_pad_end,
+                ..
+            }) => match multiplier {
+                None => panic!("`multiplier` should not be `None` when `offsets` is provided"),
+                Some(multiplier) => {
+                    let time_len = data_slice.len() / multiplier as usize;
+                    let total_multiplier = multiplier + channel_pad_start + channel_pad_end;
+                    (0..time_len).for_each(|t| {
+                        let t_start = t as i64 * total_multiplier + channel_pad_start;
+                        let ft_start = f_start_idx + t_start as usize;
+                        let dt_start = t * multiplier as usize;
+                        let dt_end = (t + 1) * multiplier as usize;
+                        flattened.copy_from_slice(ft_start, &data_slice[dt_start..dt_end]);
+                    });
+                }
+            },
+        };
+
+        let mut columns_offset = 0;
+        let mut i_time_offset = 0;
+        let column_offset = match offsets {
+            None => 0,
+            Some(Offsets { column_offset, .. }) => column_offset,
+        };
+        let total_multiplier = match multiplier {
+            None => None,
+            Some(multiplier) => Some(
+                multiplier
+                    + match offsets {
+                        None => 0,
+                        Some(Offsets {
+                            channel_pad_start,
+                            channel_pad_end,
+                            ..
+                        }) => channel_pad_start + channel_pad_end,
+                    },
+            ),
+        };
+        columns_per_day
+            .iter()
+            .enumerate()
+            .for_each(|(i, date_columns)| {
+                let i_offset = num_ticks_per_day * columns_offset;
+                let i_start_idx = start_idx + i_offset;
+                let i_time_start_idx = if i == 0 {
+                    time_start_idx % num_ticks_per_day
+                } else {
+                    0
+                };
+                let mut i_time_end_idx = if i == columns_per_day.len() - 1 {
+                    (time_end_idx + 1) % num_ticks_per_day
+                } else {
+                    num_ticks_per_day
+                };
+                if i_time_end_idx == 0 {
+                    i_time_end_idx = num_ticks_per_day;
+                }
+                let i_rows_idx = searchsorted_array(&date_columns.view(), columns);
+                let i_rows_idx = i_rows_idx.into_raw_vec();
+                let mut i_corrected_rows_idx = i_rows_idx.clone();
+                i_rows_idx.iter().enumerate().for_each(|(j, &row_idx)| {
+                    if row_idx >= num_columns_per_day[i] {
+                        i_corrected_rows_idx[j] = 0;
+                    }
+                });
+                let mut tasks = Vec::new();
+                let mut f_start_indices = Vec::new();
+                zip(i_corrected_rows_idx, i_rows_idx).enumerate().for_each(
+                    |(j, (corrected_idx, idx))| {
+                        let date_start_idx = i_start_idx + idx * num_ticks_per_day;
+                        let mut f_start_idx =
+                            (j as i64 + column_offset) * datetime_len + i_time_offset;
+                        if let Some(total_multiplier) = total_multiplier {
+                            f_start_idx *= total_multiplier;
+                        }
+                        let f_start_idx = f_start_idx as usize;
+                        if date_columns[corrected_idx as usize] == columns[j] {
+                            let col_offset = corrected_idx * num_ticks_per_day;
+                            let args = FetcherArgs {
+                                c,
+                                start_idx: date_start_idx + i_time_start_idx,
+                                end_idx: date_start_idx + i_time_end_idx,
+                                date_idx: unique_date_idxs[i],
+                                date_col_idx: corrected_idx,
+                                date_start_idx,
+                                time_start_idx: col_offset + i_time_start_idx,
+                                time_end_idx: col_offset + i_time_end_idx,
+                                num_ticks_per_day,
+                                data_len: i_time_end_idx - i_time_start_idx,
+                            };
+                            if data_getter.can_batch_fetch() {
+                                tasks.push(args);
+                                f_start_indices.push(f_start_idx);
+                            } else {
+                                let data = data_getter.fetch(args);
+                                fill_data(f_start_idx, data.as_slice().unwrap());
+                            }
+                        } else {
+                            let mut nan_len = i_time_end_idx - i_time_start_idx;
+                            if let Some(multiplier) = multiplier {
+                                nan_len *= multiplier;
+                            }
+                            fill_data(f_start_idx, vec![T::nan(); nan_len as usize].as_slice());
+                        }
+                    },
+                );
+                if !tasks.is_empty() {
+                    let batch_data = data_getter.batch_fetch(tasks);
+                    zip(batch_data, f_start_indices).for_each(|(data, f_start_idx)| {
+                        fill_data(f_start_idx, data.as_slice().unwrap());
+                    });
+                }
+                i_time_offset = i_time_offset + i_time_end_idx - i_time_start_idx;
+                columns_offset += num_columns_per_day[i];
+            });
+    }
+}
+
+/// an async version of `column_contiguous`.
+pub async fn async_column_contiguous<'a, T, F0, F1>(
+    c: Option<usize>,
+    datetime_start: i64,
+    datetime_end: i64,
+    datetime_len: i64,
+    columns: &ArrayView1<'_, i64>,
+    num_ticks_per_day: i64,
+    full_index: &ArrayView1<'_, i64>,
+    time_idx_to_date_idx: &ArrayView1<'_, i64>,
+    date_columns_offset: &ArrayView1<'_, i64>,
+    columns_getter: F0,
+    data_getter: F1,
+    mut flattened: UnsafeSlice<'_, T>,
+    multiplier: Option<i64>,
+    offsets: Option<Offsets>,
+) where
+    T: AFloat,
+    F0: Fn(i64, i64) -> ArrayView1<'a, i64>,
+    F1: AsyncFetcher<T>,
+{
+    let time_start_idx = searchsorted(full_index, datetime_start);
+    let time_end_idx = time_start_idx + datetime_len - 1;
+    if full_index[time_end_idx as usize] != datetime_end {
+        panic!("`datetime_index` is not continuous")
+    } else {
+        let start_date_idx = time_idx_to_date_idx[time_start_idx as usize];
+        let end_date_idx = time_idx_to_date_idx[time_end_idx as usize];
+        let start_idx = date_columns_offset[start_date_idx as usize] * num_ticks_per_day;
+        let unique_date_idxs = Vec::from_iter(start_date_idx..=end_date_idx);
+        let columns_per_day = Vec::from_iter(unique_date_idxs.iter().map(|&date_idx| {
+            let start_idx = date_columns_offset[date_idx as usize];
+            let end_idx = date_columns_offset[(date_idx + 1) as usize];
+            return columns_getter(start_idx, end_idx);
+        }));
+        let num_columns_per_day: Vec<i64> =
+            columns_per_day.iter().map(|x| x.len() as i64).collect();
+        let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match offsets {
+            None => flattened.copy_from_slice(f_start_idx, data_slice),
+            Some(Offsets {
+                channel_pad_start,
+                channel_pad_end,
+                ..
+            }) => match multiplier {
+                None => panic!("`multiplier` should not be `None` when `offsets` is provided"),
+                Some(multiplier) => {
+                    let time_len = data_slice.len() / multiplier as usize;
+                    let total_multiplier = multiplier + channel_pad_start + channel_pad_end;
+                    (0..time_len).for_each(|t| {
+                        let t_start = t as i64 * total_multiplier + channel_pad_start;
+                        let ft_start = f_start_idx + t_start as usize;
+                        let dt_start = t * multiplier as usize;
+                        let dt_end = (t + 1) * multiplier as usize;
+                        flattened.copy_from_slice(ft_start, &data_slice[dt_start..dt_end]);
+                    });
+                }
+            },
+        };
+
+        let mut columns_offset = 0;
+        let mut i_time_offset = 0;
+        let column_offset = match offsets {
+            None => 0,
+            Some(Offsets { column_offset, .. }) => column_offset,
+        };
+        let total_multiplier = match multiplier {
+            None => None,
+            Some(multiplier) => Some(
+                multiplier
+                    + match offsets {
+                        None => 0,
+                        Some(Offsets {
+                            channel_pad_start,
+                            channel_pad_end,
+                            ..
+                        }) => channel_pad_start + channel_pad_end,
+                    },
+            ),
+        };
+        let mut tasks = Vec::new();
+        let mut f_start_indices = Vec::new();
+        columns_per_day
+            .iter()
+            .enumerate()
+            .for_each(|(i, date_columns)| {
+                let i_offset = num_ticks_per_day * columns_offset;
+                let i_start_idx = start_idx + i_offset;
+                let i_time_start_idx = if i == 0 {
+                    time_start_idx % num_ticks_per_day
+                } else {
+                    0
+                };
+                let mut i_time_end_idx = if i == columns_per_day.len() - 1 {
+                    (time_end_idx + 1) % num_ticks_per_day
+                } else {
+                    num_ticks_per_day
+                };
+                if i_time_end_idx == 0 {
+                    i_time_end_idx = num_ticks_per_day;
+                }
+                let i_rows_idx = searchsorted_array(&date_columns.view(), columns);
+                let i_rows_idx = i_rows_idx.into_raw_vec();
+                let mut i_corrected_rows_idx = i_rows_idx.clone();
+                i_rows_idx.iter().enumerate().for_each(|(j, &row_idx)| {
+                    if row_idx >= num_columns_per_day[i] {
+                        i_corrected_rows_idx[j] = 0;
+                    }
+                });
+                zip(i_corrected_rows_idx, i_rows_idx).enumerate().for_each(
+                    |(j, (corrected_idx, idx))| {
+                        let date_start_idx = i_start_idx + idx * num_ticks_per_day;
+                        let mut f_start_idx =
+                            (j as i64 + column_offset) * datetime_len + i_time_offset;
+                        if let Some(total_multiplier) = total_multiplier {
+                            f_start_idx *= total_multiplier;
+                        }
+                        let f_start_idx = f_start_idx as usize;
+                        if date_columns[corrected_idx as usize] == columns[j] {
+                            let col_offset = corrected_idx * num_ticks_per_day;
+                            let args = FetcherArgs {
+                                c,
+                                start_idx: date_start_idx + i_time_start_idx,
+                                end_idx: date_start_idx + i_time_end_idx,
+                                date_idx: unique_date_idxs[i],
+                                date_col_idx: corrected_idx,
+                                date_start_idx,
+                                time_start_idx: col_offset + i_time_start_idx,
+                                time_end_idx: col_offset + i_time_end_idx,
+                                num_ticks_per_day,
+                                data_len: i_time_end_idx - i_time_start_idx,
+                            };
+                            tasks.push(args);
+                            f_start_indices.push(f_start_idx);
+                        } else {
+                            let mut nan_len = i_time_end_idx - i_time_start_idx;
+                            if let Some(multiplier) = multiplier {
+                                nan_len *= multiplier;
+                            }
+                            fill_data(f_start_idx, vec![T::nan(); nan_len as usize].as_slice());
+                        }
+                    },
+                );
+                i_time_offset = i_time_offset + i_time_end_idx - i_time_start_idx;
+                columns_offset += num_columns_per_day[i];
+            });
+        let futures = tasks.into_iter().map(|args| data_getter.fetch(args));
+        let batch_data = futures::future::join_all(futures).await;
+        zip(batch_data, f_start_indices).for_each(|(data, f_start_idx)| {
+            fill_data(f_start_idx, data.as_slice().unwrap());
+        });
+    }
+}
+
