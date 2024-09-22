@@ -1129,3 +1129,337 @@ pub fn redis_grouped_sliced_column_contiguous<'a, T: AFloat>(
     });
     flattened
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use numpy::ndarray::prelude::*;
+
+    fn assert_vec_eq(va: Array2<f32>, vb: Array2<f32>) {
+        if va.shape() != vb.shape() {
+            panic!("shape not equal: {:?} != {:?}", va.shape(), vb.shape());
+        }
+        let mut eq = true;
+        for (a, b) in zip(va.iter(), vb.iter()) {
+            if a.is_nan() != b.is_nan() {
+                eq = false;
+                break;
+            }
+            if !a.is_nan() && a != b {
+                eq = false;
+                break;
+            }
+        }
+        if !eq {
+            panic!("not equal:\n{:#?}\n!=\n{:#?}", va, vb);
+        }
+    }
+
+    #[test]
+    fn test_shm_row_contiguous() {
+        let datetime_start = 1;
+        let datetime_end = 8;
+        let datetime_len = 6;
+        let columns = array![0, 1, 2, 3];
+        let num_ticks_per_day = 2;
+        let full_index = array![0, 1, 2, 3, 4, 6, 8, 10];
+        let time_idx_to_date_idx = array![0, 0, 1, 1, 2, 2, 3, 3];
+        let date_columns_offset = array![0, 4, 9, 15, 22];
+        let compact_columns =
+            array![0, 1, 2, 3, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6];
+        let compact_data = Array::from_iter((0..44).map(|x| x as f32));
+
+        let flattened = shm_row_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index.view(),
+            &time_idx_to_date_idx.view(),
+            &date_columns_offset.view(),
+            &compact_columns.view(),
+            &compact_data.view(),
+        );
+        let result = Array::from_shape_vec((6, 4), flattened).unwrap();
+        assert_vec_eq(
+            result,
+            array![
+                [4., 5., 6., 7.],
+                [8., 9., 10., 11.],
+                [13., 14., 15., 16.],
+                [18., 19., 20., 21.],
+                [24., 25., 26., 27.],
+                [30., 31., 32., 33.],
+            ],
+        );
+
+        let columns = array![1, 2, 3, 4];
+        let flattened = shm_row_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index.view(),
+            &time_idx_to_date_idx.view(),
+            &date_columns_offset.view(),
+            &compact_columns.view(),
+            &compact_data.view(),
+        );
+        let result = Array::from_shape_vec((6, 4), flattened).unwrap();
+        assert_vec_eq(
+            result,
+            array![
+                [5., 6., 7., f32::NAN],
+                [9., 10., 11., 12.],
+                [14., 15., 16., 17.],
+                [19., 20., 21., 22.],
+                [25., 26., 27., 28.],
+                [31., 32., 33., 34.],
+            ],
+        );
+
+        let columns = array![2, 3, 4, 5];
+        let flattened = shm_row_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index.view(),
+            &time_idx_to_date_idx.view(),
+            &date_columns_offset.view(),
+            &compact_columns.view(),
+            &compact_data.view(),
+        );
+        let result = Array::from_shape_vec((6, 4), flattened).unwrap();
+        assert_vec_eq(
+            result,
+            array![
+                [6., 7., f32::NAN, f32::NAN],
+                [10., 11., 12., f32::NAN],
+                [15., 16., 17., f32::NAN],
+                [20., 21., 22., 23.],
+                [26., 27., 28., 29.],
+                [32., 33., 34., 35.],
+            ],
+        );
+    }
+
+    #[test]
+    fn test_shm_column_contiguous_data() {
+        let datetime_start = 1;
+        let datetime_end = 8;
+        let datetime_len = 6;
+        let columns = array![0, 1, 2, 3];
+        let num_ticks_per_day = 2;
+        let full_index = array![0, 1, 2, 3, 4, 6, 8, 10];
+        let time_idx_to_date_idx = array![0, 0, 1, 1, 2, 2, 3, 3];
+        let date_columns_offset = array![0, 4, 9, 15, 22];
+        let compact_symbols =
+            array![0, 1, 2, 3, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6];
+        let compact_data = Array::from_iter((0..44).map(|x| x as f32));
+
+        let flattened = shm_column_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index.view(),
+            &time_idx_to_date_idx.view(),
+            &date_columns_offset.view(),
+            &compact_symbols.view(),
+            &compact_data.view(),
+        );
+        let result = Array::from_shape_vec((4, 6), flattened)
+            .unwrap()
+            .t()
+            .to_owned();
+        assert_vec_eq(
+            result,
+            array![
+                [1.0, 3.0, 5.0, 7.0],
+                [8.0, 10.0, 12.0, 14.0],
+                [9.0, 11.0, 13.0, 15.0],
+                [18.0, 20.0, 22.0, 24.0],
+                [19.0, 21.0, 23.0, 25.0],
+                [30.0, 32.0, 34.0, 36.0],
+            ],
+        );
+
+        let columns = array![1, 2, 3, 4];
+        let flattened = shm_column_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index.view(),
+            &time_idx_to_date_idx.view(),
+            &date_columns_offset.view(),
+            &compact_symbols.view(),
+            &compact_data.view(),
+        );
+        let result = Array::from_shape_vec((4, 6), flattened)
+            .unwrap()
+            .t()
+            .to_owned();
+        assert_vec_eq(
+            result,
+            array![
+                [3.0, 5.0, 7.0, f32::NAN],
+                [10.0, 12.0, 14.0, 16.0],
+                [11.0, 13.0, 15.0, 17.0],
+                [20.0, 22.0, 24.0, 26.0],
+                [21.0, 23.0, 25.0, 27.0],
+                [32.0, 34.0, 36.0, 38.0],
+            ],
+        );
+
+        let columns = array![2, 3, 4, 5];
+        let flattened = shm_column_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index.view(),
+            &time_idx_to_date_idx.view(),
+            &date_columns_offset.view(),
+            &compact_symbols.view(),
+            &compact_data.view(),
+        );
+        let result = Array::from_shape_vec((4, 6), flattened)
+            .unwrap()
+            .t()
+            .to_owned();
+        assert_vec_eq(
+            result,
+            array![
+                [5.0, 7.0, f32::NAN, f32::NAN],
+                [12.0, 14.0, 16.0, f32::NAN],
+                [13.0, 15.0, 17.0, f32::NAN],
+                [22.0, 24.0, 26.0, 28.0],
+                [23.0, 25.0, 27.0, 29.0],
+                [34.0, 36.0, 38.0, 40.0],
+            ],
+        );
+    }
+
+    #[test]
+    fn test_shm_sliced_column_contiguous_data() {
+        let datetime_start = 1;
+        let datetime_end = 8;
+        let datetime_len = 6;
+        let columns = array![0, 1, 2, 3];
+        let num_ticks_per_day = 2;
+        let full_index = array![0, 1, 2, 3, 4, 6, 8, 10];
+        let full_index = full_index.view();
+        let time_idx_to_date_idx = array![0, 0, 1, 1, 2, 2, 3, 3];
+        let time_idx_to_date_idx = time_idx_to_date_idx.view();
+        let date_symbols_offset = array![0, 4, 9, 15, 22];
+        let date_symbols_offset = date_symbols_offset.view();
+        let compact_symbols =
+            array![0, 1, 2, 3, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6];
+        let compact_symbols = compact_symbols.view();
+        let sliced_data = vec![
+            Array::from_iter((0..8).map(|x| x as f32)),
+            Array::from_iter((8..18).map(|x| x as f32)),
+            Array::from_iter((18..30).map(|x| x as f32)),
+            Array::from_iter((30..44).map(|x| x as f32)),
+        ];
+        let sliced_data = sliced_data.iter().map(|x| x.view()).collect::<Vec<_>>();
+        let sliced_data = sliced_data.iter().map(|x| x).collect::<Vec<_>>();
+
+        let flattened = shm_sliced_column_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index,
+            &time_idx_to_date_idx,
+            &date_symbols_offset,
+            &compact_symbols,
+            &sliced_data,
+            None,
+        );
+        let result = Array::from_shape_vec((4, 6), flattened)
+            .unwrap()
+            .t()
+            .to_owned();
+        assert_vec_eq(
+            result,
+            array![
+                [1.0, 3.0, 5.0, 7.0],
+                [8.0, 10.0, 12.0, 14.0],
+                [9.0, 11.0, 13.0, 15.0],
+                [18.0, 20.0, 22.0, 24.0],
+                [19.0, 21.0, 23.0, 25.0],
+                [30.0, 32.0, 34.0, 36.0],
+            ],
+        );
+
+        let columns = array![1, 2, 3, 4];
+        let flattened = shm_sliced_column_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index,
+            &time_idx_to_date_idx,
+            &date_symbols_offset,
+            &compact_symbols,
+            &sliced_data,
+            None,
+        );
+        let result = Array::from_shape_vec((4, 6), flattened)
+            .unwrap()
+            .t()
+            .to_owned();
+        assert_vec_eq(
+            result,
+            array![
+                [3.0, 5.0, 7.0, f32::NAN],
+                [10.0, 12.0, 14.0, 16.0],
+                [11.0, 13.0, 15.0, 17.0],
+                [20.0, 22.0, 24.0, 26.0],
+                [21.0, 23.0, 25.0, 27.0],
+                [32.0, 34.0, 36.0, 38.0],
+            ],
+        );
+
+        let columns = array![2, 3, 4, 5];
+        let flattened = shm_sliced_column_contiguous(
+            datetime_start,
+            datetime_end,
+            datetime_len,
+            &columns.view(),
+            num_ticks_per_day,
+            &full_index,
+            &time_idx_to_date_idx,
+            &date_symbols_offset,
+            &compact_symbols,
+            &sliced_data,
+            None,
+        );
+        let result = Array::from_shape_vec((4, 6), flattened)
+            .unwrap()
+            .t()
+            .to_owned();
+        assert_vec_eq(
+            result,
+            array![
+                [5.0, 7.0, f32::NAN, f32::NAN],
+                [12.0, 14.0, 16.0, f32::NAN],
+                [13.0, 15.0, 17.0, f32::NAN],
+                [22.0, 24.0, 26.0, 28.0],
+                [23.0, 25.0, 27.0, 29.0],
+                [34.0, 36.0, 38.0, 40.0],
+            ],
+        );
+    }
+}
