@@ -10,7 +10,7 @@ use opendal::Result;
 use opendal::{Buffer, Operator};
 use std::marker::PhantomData;
 
-/// core implementations
+// core implementations
 
 struct S3Client<T: AFloat> {
     op: Operator,
@@ -76,7 +76,7 @@ impl<T: AFloat> S3Client<T> {
     }
 }
 
-/// public interface
+// public interface
 
 pub struct S3Source<T: AFloat>(S3Client<T>);
 
