@@ -1,5 +1,5 @@
 use md5::{Digest, Md5};
-use std::{collections::HashMap, fmt, time::Instant};
+use std::{collections::HashMap, fmt, sync::RwLock, time::Instant};
 
 pub fn hash_code(code: &str) -> String {
     let mut hasher = Md5::new();
@@ -84,31 +84,36 @@ impl fmt::Debug for Statics {
 }
 
 /// A simple container of `Tracker`s, useful if you want to inspect concurrent events.
-pub struct Trackers(pub Vec<Tracker>);
+pub struct Trackers(pub Vec<RwLock<Tracker>>);
 impl Trackers {
     pub fn new(n: usize) -> Self {
-        Self(vec![Tracker::new(); n])
+        Self((0..n).map(|_| RwLock::new(Tracker::new())).collect())
     }
 
-    pub fn track(&mut self, idx: usize, time: f64) {
-        self.0[idx].track(time);
+    pub fn track(&self, idx: usize, time: f64) {
+        self.0[idx].write().unwrap().track(time);
     }
 
-    pub fn track_start(&mut self, idx: usize) {
-        self.0[idx].track_start();
+    pub fn track_start(&self, idx: usize) {
+        self.0[idx].write().unwrap().track_start();
     }
 
-    pub fn track_end(&mut self, idx: usize) {
-        self.0[idx].track_end();
+    pub fn track_end(&self, idx: usize) {
+        self.0[idx].write().unwrap().track_end();
     }
 
-    pub fn reset(&mut self) {
-        self.0.iter_mut().for_each(|tracker| tracker.reset());
+    pub fn reset(&self) {
+        self.0
+            .iter()
+            .for_each(|tracker| tracker.write().unwrap().reset());
     }
 
     pub fn get_statics(&self) -> Vec<Statics> {
-        let mut statics: Vec<Statics> =
-            self.0.iter().map(|tracker| tracker.get_statics()).collect();
+        let mut statics: Vec<Statics> = self
+            .0
+            .iter()
+            .map(|tracker| tracker.read().unwrap().get_statics())
+            .collect();
         let mut fast_path_idx = 0;
         let mut bottleneck_idx = 0;
         let mut fast_path_t = statics[0].n as f64 * statics[0].mean;
@@ -130,46 +135,54 @@ impl Trackers {
 }
 
 /// A simple, named container of `Tracker`s, useful if you want to inspect different events and compare them.
-pub struct NamedTrackers(pub HashMap<String, Tracker>);
+pub struct NamedTrackers(pub HashMap<String, RwLock<Tracker>>);
 impl NamedTrackers {
     pub fn new(names: Vec<String>) -> Self {
         Self(
             names
                 .into_iter()
-                .map(|name| (name, Tracker::new()))
+                .map(|name| (name, RwLock::new(Tracker::new())))
                 .collect(),
         )
     }
 
-    pub fn track(&mut self, name: &str, time: f64) {
+    pub fn track(&self, name: &str, time: f64) {
         self.0
-            .get_mut(name)
+            .get(name)
             .expect(format!("'{}' not found in current trackers", name).as_str())
+            .write()
+            .unwrap()
             .track(time);
     }
 
-    pub fn track_start(&mut self, name: &str) {
+    pub fn track_start(&self, name: &str) {
         self.0
-            .get_mut(name)
+            .get(name)
             .expect(format!("'{}' not found in current trackers", name).as_str())
+            .write()
+            .unwrap()
             .track_start();
     }
 
-    pub fn track_end(&mut self, name: &str) {
+    pub fn track_end(&self, name: &str) {
         self.0
-            .get_mut(name)
+            .get(name)
             .expect(format!("'{}' not found in current trackers", name).as_str())
+            .write()
+            .unwrap()
             .track_end();
     }
 
-    pub fn reset(&mut self) {
-        self.0.iter_mut().for_each(|(_, tracker)| tracker.reset());
+    pub fn reset(&self) {
+        self.0
+            .iter()
+            .for_each(|(_, tracker)| tracker.write().unwrap().reset());
     }
 
     pub fn get_statics(&self) -> HashMap<String, Statics> {
         self.0
             .iter()
-            .map(|(name, tracker)| (name.clone(), tracker.get_statics()))
+            .map(|(name, tracker)| (name.clone(), tracker.read().unwrap().get_statics()))
             .collect()
     }
 }
