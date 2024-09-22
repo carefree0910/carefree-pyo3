@@ -15,6 +15,8 @@ use crate::toolkit::array::AFloat;
 use numpy::{ndarray::CowArray, Ix1};
 use std::future::Future;
 
+#[cfg(feature = "io-mem-redis")]
+pub mod redis;
 pub mod shm;
 
 /// arguments for the `Fetcher::fetch` method

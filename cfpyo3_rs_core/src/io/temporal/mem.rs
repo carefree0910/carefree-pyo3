@@ -960,3 +960,161 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
     flattened
 }
 
+/// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
+#[cfg(feature = "io-mem-redis")]
+pub fn redis_sliced_column_contiguous<'a, T: AFloat>(
+    datetime_start: &Vec<i64>,
+    datetime_end: &Vec<i64>,
+    datetime_len: i64,
+    columns: &Vec<&ArrayView1<i64>>,
+    num_ticks_per_day: i64,
+    full_index: &Vec<&ArrayView1<i64>>,
+    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
+    date_columns_offset: &Vec<&ArrayView1<i64>>,
+    compact_columns: &Vec<&ArrayView1<i64>>,
+    redis_keys: &'a Vec<&'a ArrayView1<'a, RedisKey>>,
+    redis_client: &'a RedisClient<T>,
+    num_threads: usize,
+) -> Vec<T> {
+    let nc = redis_keys.len();
+    let num_data_per_task = datetime_len as usize * columns[0].len();
+    let num_tasks = datetime_start.len() * nc;
+    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
+    let flattened_slice = flattened.as_mut_slice();
+    let num_threads = num_threads.min(num_tasks);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(move |s| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        (0..nc).for_each(|c| {
+            let full_index = full_index[c];
+            let time_idx_to_date_idx = time_idx_to_date_idx[c];
+            let date_columns_offset = date_columns_offset[c];
+            let compact_columns = compact_columns[c];
+            let columns_getter = |start_idx: i64, end_idx: i64| {
+                compact_columns.slice(s![start_idx as isize..end_idx as isize])
+            };
+            datetime_start
+                .iter()
+                .enumerate()
+                .for_each(|(i, &datetime_start)| {
+                    let datetime_end = datetime_end[i];
+                    let columns = columns[i];
+                    let offset = (i * nc + c) * num_data_per_task;
+                    s.spawn(move |_| {
+                        column_contiguous(
+                            Some(c),
+                            datetime_start,
+                            datetime_end,
+                            datetime_len,
+                            columns,
+                            num_ticks_per_day,
+                            full_index,
+                            time_idx_to_date_idx,
+                            date_columns_offset,
+                            columns_getter,
+                            RedisFetcher::new(&redis_client, redis_keys),
+                            &mut flattened_slice.slice(offset, offset + num_data_per_task),
+                            None,
+                            None,
+                        );
+                    });
+                })
+        });
+    });
+    flattened
+}
+
+/// a grouped version of `redis_sliced_column_contiguous`.
+#[cfg(feature = "io-mem-redis")]
+pub fn redis_grouped_sliced_column_contiguous<'a, T: AFloat>(
+    datetime_start: &Vec<i64>,
+    datetime_end: &Vec<i64>,
+    datetime_len: i64,
+    columns: &Vec<&ArrayView1<i64>>,
+    num_ticks_per_day: i64,
+    full_index: &Vec<&ArrayView1<i64>>,
+    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
+    date_columns_offset: &Vec<&ArrayView1<i64>>,
+    compact_columns: &Vec<&ArrayView1<i64>>,
+    redis_keys: &'a Vec<&'a ArrayView1<'a, RedisKey>>,
+    redis_client: &'a RedisClient<T>,
+    multipliers: &Vec<i64>,
+    num_threads: usize,
+) -> Vec<T> {
+    let bz = datetime_start.len();
+    let nc = multipliers.iter().sum::<i64>();
+    let n_groups = redis_keys.len();
+    let num_columns = columns[0].len();
+    let num_data_per_full_task = num_columns * datetime_len as usize * nc as usize;
+    let mut flattened = vec![T::zero(); bz * n_groups * num_data_per_full_task];
+    let flattened_slice = flattened.as_mut_slice();
+    // here, we separate a full task into small tasks to fully utilize the multi-threading.
+    let num_columns_per_task = (num_columns / 200).max(10.min(num_columns));
+    let num_columns_task = num_columns / num_columns_per_task;
+    let num_tasks = bz * n_groups * num_columns_task;
+    let num_threads = num_threads.min(num_tasks);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
+    pool.scope(move |s: &rayon::Scope<'_>| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        let mut channel_pad_start = 0;
+        let mut channel_pad_end = nc;
+        (0..n_groups).for_each(|g| {
+            let full_index = full_index[g];
+            let time_idx_to_date_idx = time_idx_to_date_idx[g];
+            let date_columns_offset = date_columns_offset[g];
+            let compact_columns = compact_columns[g];
+            let columns_getter = |start_idx: i64, end_idx: i64| {
+                compact_columns.slice(s![start_idx as isize..end_idx as isize])
+            };
+            let multiplier = multipliers[g];
+            let next_pad_start = channel_pad_start + multiplier;
+            channel_pad_end -= multiplier;
+            datetime_start
+                .iter()
+                .enumerate()
+                .for_each(|(b, &datetime_start)| {
+                    let datetime_end = datetime_end[b];
+                    let columns = columns[b];
+                    let offset = b * num_data_per_full_task;
+                    (0..num_columns_task).for_each(|n| {
+                        let column_start = n * num_columns_per_task;
+                        let column_end = if n == num_columns_task - 1 {
+                            num_columns
+                        } else {
+                            (n + 1) * num_columns_per_task
+                        };
+                        s.spawn(move |_| {
+                            column_contiguous(
+                                None,
+                                datetime_start,
+                                datetime_end,
+                                datetime_len,
+                                &columns.slice(s![column_start..column_end]),
+                                num_ticks_per_day,
+                                full_index,
+                                time_idx_to_date_idx,
+                                date_columns_offset,
+                                columns_getter,
+                                RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
+                                &mut flattened_slice.slice(offset, offset + num_data_per_full_task),
+                                Some(multiplier),
+                                Some(Offsets {
+                                    column_offset: column_start as i64,
+                                    channel_pad_start,
+                                    channel_pad_end,
+                                }),
+                            );
+                        });
+                    });
+                });
+            channel_pad_start = next_pad_start;
+        });
+    });
+    flattened
+}

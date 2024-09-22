@@ -25,6 +25,7 @@ rayon = "1.10.0"
 
 bytes = { version = "1.7.2", optional = true }
 opendal = { version = "0.50.0", features = ["services-s3"], optional = true }
+redis = { version = "0.26.1", features = [ "cluster" ], optional = true }
 tokio = { version = "1.40.0", features = ["full"], optional = true }
 
 [features]
@@ -33,4 +34,10 @@ io-source-s3 = [
     "dep:bytes",
     "dep:opendal",
     "dep:tokio",
+]
+io-mem-redis = [
+    "dep:redis",
+]
+bench-io-mem-redis = [
+    "io-mem-redis",
 ]
