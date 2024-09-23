@@ -30,7 +30,12 @@ use numpy::{
 #[cfg(feature = "io-mem-redis")]
 use redis::{RedisClient, RedisFetcher, RedisGroupedFetcher, RedisKey};
 use shm::{SHMFetcher, SlicedSHMFetcher};
-use std::{collections::HashMap, future::Future, iter::zip};
+use std::{
+    collections::HashMap,
+    future::Future,
+    iter::zip,
+    sync::{Arc, Mutex},
+};
 
 #[cfg(feature = "io-mem-redis")]
 pub mod redis;
@@ -147,7 +152,8 @@ fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
 ///
 /// # notes
 ///
-/// this function is not very practical to use, so we are not utilizing the `fetcher` module for simplicity.
+/// this function is not very practical to use, so we are neither utilizing the `fetcher` module
+/// nor the `ColumnIndicesGetter` trait for simplicity.
 pub fn row_contiguous<'a, T, F0, F1>(
     datetime_start: i64,
     datetime_end: i64,
@@ -329,6 +335,37 @@ pub struct Offsets {
     channel_pad_end: i64,
 }
 
+pub trait ColumnIndicesGetter {
+    fn get(&self, i: usize, date_columns: &ArrayView1<ColumnsDtype>) -> Vec<usize>;
+}
+struct CachedGetter<'a>(
+    Arc<Mutex<HashMap<usize, Vec<usize>>>>,
+    &'a ArrayView1<'a, ColumnsDtype>,
+);
+impl<'a> CachedGetter<'a> {
+    fn new(columns: &'a ArrayView1<'a, ColumnsDtype>) -> Self {
+        Self(Arc::new(Mutex::new(HashMap::new())), columns)
+    }
+    fn new_vec(columns: &Vec<&'a ArrayView1<'a, ColumnsDtype>>) -> Vec<Self> {
+        columns.iter().map(|x| Self::new(x)).collect()
+    }
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0), self.1)
+    }
+}
+impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
+    fn get(&self, i: usize, date_columns: &ArrayView1<ColumnsDtype>) -> Vec<usize> {
+        let mut cache = self.0.lock().unwrap();
+        if let Some(indices) = cache.get(&i) {
+            indices.clone()
+        } else {
+            let indices = searchsorted_array(&date_columns.view(), self.1);
+            cache.insert(i, indices.clone());
+            indices
+        }
+    }
+}
+
 /// a typically useful function for random-fetching temporal column-contiguous data.
 ///
 /// # constants
@@ -351,6 +388,9 @@ pub struct Offsets {
 /// - `time_idx_to_date_idx` (`N * Nd`) - the mapping from time index to date index.
 /// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
 /// - `columns_getter` - the getter function for columns, args: `(start_idx, end_idx)`.
+/// - `columns_indices_getter` - the getter function for columns indices, args: `(i, date_columns)`.
+/// > it should in fact return `searchsorted_array(&date_columns.view(), columns)`, but we provide
+///   this interface so you can optimize the performance by caching the result (depends on `i`).
 /// - `data_getter` - the getter function for data, args: `(start_idx, end_idx)`.
 /// - `flattened` (`datetime_len * columns.len()`) - the flattened array to fill.
 /// - `multiplier` - the multiplier for each data item. normally, a data item is a simple fp32,
@@ -358,7 +398,7 @@ pub struct Offsets {
 ///   the possibility of fetching more contiguous data at once. in this case, we need to know the
 ///   multiplier to correctly fill the `flattened` array.
 /// - `offsets` - the offsets for each data item, see documentation for `Offsets`.
-pub fn column_contiguous<'a, T, F0, F1>(
+pub fn column_contiguous<'a, T, F0, F1, F2>(
     c: Option<usize>,
     datetime_start: i64,
     datetime_end: i64,
@@ -369,14 +409,16 @@ pub fn column_contiguous<'a, T, F0, F1>(
     time_idx_to_date_idx: &ArrayView1<i64>,
     date_columns_offset: &ArrayView1<i64>,
     columns_getter: F0,
-    data_getter: F1,
+    columns_indices_getter: F1,
+    data_getter: F2,
     flattened: &mut UnsafeSlice<T>,
     multiplier: Option<i64>,
     offsets: Option<Offsets>,
 ) where
     T: AFloat,
     F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
-    F1: Fetcher<T>,
+    F1: ColumnIndicesGetter,
+    F2: Fetcher<T>,
 {
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
@@ -454,7 +496,7 @@ pub fn column_contiguous<'a, T, F0, F1>(
                 if i_time_end_idx == 0 {
                     i_time_end_idx = num_ticks_per_day;
                 }
-                let i_rows_idx = searchsorted_array(&date_columns.view(), columns);
+                let i_rows_idx = columns_indices_getter.get(i, &date_columns.view());
                 let mut i_corrected_rows_idx = i_rows_idx.clone();
                 i_rows_idx.iter().enumerate().for_each(|(j, &row_idx)| {
                     if row_idx >= num_columns_per_day[i] {
@@ -516,7 +558,7 @@ pub fn column_contiguous<'a, T, F0, F1>(
 }
 
 /// an async version of `column_contiguous`.
-pub async fn async_column_contiguous<'a, T, F0, F1>(
+pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
     c: Option<usize>,
     datetime_start: i64,
     datetime_end: i64,
@@ -527,14 +569,16 @@ pub async fn async_column_contiguous<'a, T, F0, F1>(
     time_idx_to_date_idx: &ArrayView1<'_, i64>,
     date_columns_offset: &ArrayView1<'_, i64>,
     columns_getter: F0,
-    data_getter: F1,
+    columns_indices_getter: F1,
+    data_getter: F2,
     mut flattened: UnsafeSlice<'_, T>,
     multiplier: Option<i64>,
     offsets: Option<Offsets>,
 ) where
     T: AFloat,
     F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
-    F1: AsyncFetcher<T>,
+    F1: ColumnIndicesGetter,
+    F2: AsyncFetcher<T>,
 {
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
@@ -614,7 +658,7 @@ pub async fn async_column_contiguous<'a, T, F0, F1>(
                 if i_time_end_idx == 0 {
                     i_time_end_idx = num_ticks_per_day;
                 }
-                let i_rows_idx = searchsorted_array(&date_columns.view(), columns);
+                let i_rows_idx = columns_indices_getter.get(i, &date_columns.view());
                 let mut i_corrected_rows_idx = i_rows_idx.clone();
                 i_rows_idx.iter().enumerate().for_each(|(j, &row_idx)| {
                     if row_idx >= num_columns_per_day[i] {
@@ -740,11 +784,11 @@ pub fn shm_row_contiguous<T: AFloat>(
 /// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
 /// - `compact_columns` (`S`) - the full, compact columns.
 /// - `compact_data` (`T * S`) - the full, compact data.
-pub fn shm_column_contiguous<'a, T: AFloat>(
+pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &ArrayView1<ColumnsDtype>,
+    columns: &'b ArrayView1<'b, ColumnsDtype>,
     num_ticks_per_day: i64,
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
@@ -765,6 +809,7 @@ pub fn shm_column_contiguous<'a, T: AFloat>(
         time_idx_to_date_idx,
         date_columns_offset,
         |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        CachedGetter::new(columns),
         SHMFetcher::new(compact_data),
         &mut UnsafeSlice::new(flattened_slice),
         None,
@@ -774,11 +819,11 @@ pub fn shm_column_contiguous<'a, T: AFloat>(
 }
 
 /// a batched version of `shm_column_contiguous`.
-pub fn shm_batch_column_contiguous<'a, T: AFloat>(
+pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
-    columns: &Vec<&ArrayView1<ColumnsDtype>>,
+    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
     num_ticks_per_day: i64,
     full_index: &Vec<&ArrayView1<i64>>,
     time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
@@ -792,6 +837,7 @@ pub fn shm_batch_column_contiguous<'a, T: AFloat>(
     let num_tasks = datetime_start.len() * nc;
     let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
     let flattened_slice = flattened.as_mut_slice();
+    let columns_indices_getters = CachedGetter::new_vec(columns);
     let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -817,6 +863,7 @@ pub fn shm_batch_column_contiguous<'a, T: AFloat>(
                         let datetime_end = datetime_end[i];
                         let columns = columns[i];
                         let offset = (i * nc + c) * num_data_per_task;
+                        let columns_indices_getter = columns_indices_getters[i].clone();
                         s.spawn(move |_| {
                             let data_getter = SHMFetcher::new(compact_data);
                             column_contiguous(
@@ -830,6 +877,7 @@ pub fn shm_batch_column_contiguous<'a, T: AFloat>(
                                 time_idx_to_date_idx,
                                 date_columns_offset,
                                 columns_getter,
+                                columns_indices_getter,
                                 data_getter,
                                 &mut flattened_slice.slice(offset, offset + num_data_per_task),
                                 None,
@@ -863,11 +911,11 @@ pub fn shm_batch_column_contiguous<'a, T: AFloat>(
 /// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
 /// - `compact_columns` (`S`) - the full, compact columns.
 /// - `sliced_data` - the sliced data, each slice contains the flattened data of each date.
-pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
+pub fn shm_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &ArrayView1<ColumnsDtype>,
+    columns: &'b ArrayView1<'b, ColumnsDtype>,
     num_ticks_per_day: i64,
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
@@ -890,6 +938,7 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
         time_idx_to_date_idx,
         date_columns_offset,
         |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        CachedGetter::new(columns),
         SlicedSHMFetcher::new(sliced_data, multiplier),
         &mut UnsafeSlice::new(flattened_slice),
         multiplier,
@@ -899,11 +948,11 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
 }
 
 /// a batched version of `shm_sliced_column_contiguous`.
-pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
+pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
-    columns: &Vec<&ArrayView1<ColumnsDtype>>,
+    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
     num_ticks_per_day: i64,
     full_index: &Vec<&ArrayView1<i64>>,
     time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
@@ -917,6 +966,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
     let num_tasks = datetime_start.len() * nc;
     let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
     let flattened_slice = flattened.as_mut_slice();
+    let columns_indices_getters = CachedGetter::new_vec(columns);
     let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -939,6 +989,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
                     let datetime_end = datetime_end[i];
                     let columns = columns[i];
                     let offset = (i * nc + c) * num_data_per_task;
+                    let columns_indices_getter = columns_indices_getters[i].clone();
                     s.spawn(move |_| {
                         let data_getter = SlicedSHMFetcher::new(sliced_data, None);
                         column_contiguous(
@@ -952,6 +1003,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
                             time_idx_to_date_idx,
                             date_columns_offset,
                             columns_getter,
+                            columns_indices_getter,
                             data_getter,
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
@@ -965,11 +1017,11 @@ pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
 }
 
 /// a batched & grouped version of `shm_sliced_column_contiguous`.
-pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
+pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
-    columns: &Vec<&ArrayView1<ColumnsDtype>>,
+    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
     num_ticks_per_day: i64,
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
@@ -983,6 +1035,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
     let num_tasks = datetime_start.len();
     let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
     let flattened_slice = flattened.as_mut_slice();
+    let columns_indices_getters = CachedGetter::new_vec(columns);
     let num_threads = num_threads.min(num_tasks);
     let multiplier = Some(num_groups);
     let pool = rayon::ThreadPoolBuilder::new()
@@ -1001,6 +1054,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
                 let datetime_end = datetime_end[i];
                 let columns = columns[i];
                 let offset = i * num_data_per_task;
+                let columns_indices_getter = columns_indices_getters[i].clone();
                 s.spawn(move |_| {
                     let data_getter = SlicedSHMFetcher::new(sliced_data, multiplier);
                     column_contiguous(
@@ -1014,6 +1068,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
                         time_idx_to_date_idx,
                         date_columns_offset,
                         columns_getter,
+                        columns_indices_getter,
                         data_getter,
                         &mut flattened_slice.slice(offset, offset + num_data_per_task),
                         multiplier,
@@ -1027,11 +1082,11 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
 
 /// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
 #[cfg(feature = "io-mem-redis")]
-pub fn redis_column_contiguous<'a, T: AFloat>(
+pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
-    columns: &Vec<&ArrayView1<ColumnsDtype>>,
+    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
     num_ticks_per_day: i64,
     full_index: &Vec<&ArrayView1<i64>>,
     time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
@@ -1046,6 +1101,7 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
     let num_tasks = datetime_start.len() * nc;
     let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
     let flattened_slice = flattened.as_mut_slice();
+    let columns_indices_getters = CachedGetter::new_vec(columns);
     let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -1068,6 +1124,7 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
                     let datetime_end = datetime_end[i];
                     let columns = columns[i];
                     let offset = (i * nc + c) * num_data_per_task;
+                    let columns_indices_getter = columns_indices_getters[i].clone();
                     s.spawn(move |_| {
                         column_contiguous(
                             Some(c),
@@ -1080,6 +1137,7 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
                             time_idx_to_date_idx,
                             date_columns_offset,
                             columns_getter,
+                            columns_indices_getter,
                             RedisFetcher::new(&redis_client, redis_keys),
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
@@ -1094,11 +1152,11 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
 
 /// a grouped version of `redis_column_contiguous`.
 #[cfg(feature = "io-mem-redis")]
-pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
+pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &Vec<i64>,
     datetime_end: &Vec<i64>,
     datetime_len: i64,
-    columns: &Vec<&ArrayView1<ColumnsDtype>>,
+    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
     num_ticks_per_day: i64,
     full_index: &Vec<&ArrayView1<i64>>,
     time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
@@ -1116,6 +1174,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
     let mut flattened = vec![T::zero(); bz * num_data_per_batch];
     let flattened_slice = flattened.as_mut_slice();
+    let columns_indices_getters = CachedGetter::new_vec(columns);
     let num_columns_per_task = (num_columns / 200).max(10.min(num_columns));
     let num_columns_task = num_columns / num_columns_per_task;
     let num_tasks = bz * n_groups * num_columns_task;
@@ -1153,6 +1212,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
                         } else {
                             (n + 1) * num_columns_per_task
                         };
+                        let columns_indices_getter = columns_indices_getters[b].clone();
                         s.spawn(move |_| {
                             column_contiguous(
                                 None,
@@ -1165,6 +1225,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
                                 time_idx_to_date_idx,
                                 date_columns_offset,
                                 columns_getter,
+                                columns_indices_getter,
                                 RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
                                 &mut flattened_slice.slice(offset, offset + num_data_per_batch),
                                 Some(multiplier),
