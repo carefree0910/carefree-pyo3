@@ -100,13 +100,11 @@ fn searchsorted<T: Ord>(arr: &ArrayView1<T>, value: &T) -> usize {
         .unwrap_or_else(|x| x)
 }
 
-fn searchsorted_array<T: Ord>(arr: &ArrayView1<T>, values: &ArrayView1<T>) -> Array1<usize> {
-    let mut result = Vec::with_capacity(values.len());
+fn searchsorted_array<T: Ord>(arr: &ArrayView1<T>, values: &ArrayView1<T>) -> Vec<usize> {
     values
         .iter()
         .map(|value| searchsorted(arr, value))
-        .for_each(|x| result.push(x));
-    Array1::from(result)
+        .collect()
 }
 
 fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
@@ -210,7 +208,6 @@ pub fn row_contiguous<'a, T, F0, F1>(
                 let cursor_end = cursor + date_count * columns_len as i64;
                 let time_idx_end = time_idx + date_count;
                 let columns_idx = searchsorted_array(&date_columns.view(), columns);
-                let columns_idx = columns_idx.into_raw_vec();
                 let mut corrected_columns_idx = columns_idx.clone();
                 columns_idx.iter().enumerate().for_each(|(i, &column_idx)| {
                     if column_idx >= columns_len {
@@ -458,7 +455,6 @@ pub fn column_contiguous<'a, T, F0, F1>(
                     i_time_end_idx = num_ticks_per_day;
                 }
                 let i_rows_idx = searchsorted_array(&date_columns.view(), columns);
-                let i_rows_idx = i_rows_idx.into_raw_vec();
                 let mut i_corrected_rows_idx = i_rows_idx.clone();
                 i_rows_idx.iter().enumerate().for_each(|(j, &row_idx)| {
                     if row_idx >= num_columns_per_day[i] {
@@ -619,7 +615,6 @@ pub async fn async_column_contiguous<'a, T, F0, F1>(
                     i_time_end_idx = num_ticks_per_day;
                 }
                 let i_rows_idx = searchsorted_array(&date_columns.view(), columns);
-                let i_rows_idx = i_rows_idx.into_raw_vec();
                 let mut i_corrected_rows_idx = i_rows_idx.clone();
                 i_rows_idx.iter().enumerate().for_each(|(j, &row_idx)| {
                     if row_idx >= num_columns_per_day[i] {
