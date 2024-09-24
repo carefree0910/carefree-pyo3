@@ -22,7 +22,7 @@ pub trait Source<T: AFloat> {
         &self,
         dates: &[&str],
         keys: &[&str],
-        dfs: &[DataFrame<T>],
+        dfs: &[&DataFrame<T>],
     ) -> impl Future<Output = Vec<()>> {
         let futures = izip!(dates, keys, dfs)
             .map(|(date, key, df)| self.write(date, key, df))
