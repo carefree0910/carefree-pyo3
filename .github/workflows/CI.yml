@@ -30,7 +30,7 @@ jobs:
     steps:
       - id: set_condition
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]] || [[ !${{ contains(github.event.head_commit.message, '📦️') }} ]]; then
+          if [[ "${{ github.ref_type }}" == "tag" ]] || [[ "${{ contains(github.event.head_commit.message, '📦️') }}" == "false" ]]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
