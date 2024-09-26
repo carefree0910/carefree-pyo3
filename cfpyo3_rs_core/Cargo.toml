@@ -16,6 +16,7 @@ name = "cfpyo3_core"
 crate-type = ["rlib"]
 
 [dependencies]
+bytes = { version = "1.7.2" }
 futures = "0.3.30"
 itertools = "0.13.0"
 md-5 = "0.10.6"
@@ -23,7 +24,6 @@ num-traits = "0.2.19"
 numpy = "0.21.0"
 rayon = "1.10.0"
 
-bytes = { version = "1.7.2", optional = true }
 opendal = { version = "0.50.0", features = ["services-s3"], optional = true }
 redis = { version = "0.26.1", features = [ "cluster" ], optional = true }
 tokio = { version = "1.40.0", features = ["full"], optional = true }
@@ -31,7 +31,6 @@ tokio = { version = "1.40.0", features = ["full"], optional = true }
 [features]
 default = []
 io-source-s3 = [
-    "dep:bytes",
     "dep:opendal",
     "dep:tokio",
 ]
