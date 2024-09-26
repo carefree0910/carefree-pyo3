@@ -30,7 +30,7 @@ tokio = { version = "1.40.0", features = ["full"], optional = true }
 
 [features]
 default = []
-io-source-s3 = [
+io-source-opendal = [
     "dep:opendal",
     "dep:tokio",
 ]
@@ -42,7 +42,7 @@ bench-io-mem-redis = [
 ]
 
 full = [
-    "io-source-s3",
+    "io-source-opendal",
     "io-mem-redis",
 ]
 bench-full = [
