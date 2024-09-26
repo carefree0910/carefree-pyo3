@@ -35,3 +35,30 @@ pub unsafe fn from_bytes<T: Sized>(bytes: Vec<u8>) -> Vec<T> {
 pub fn to_nbytes<T: Sized>(values_len: usize) -> usize {
     values_len * size_of::<T>()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_bytes() {
+        let values: Vec<i32> = vec![1, 2, 3, 4, 5];
+        let bytes = unsafe { to_bytes(&values) };
+        assert_eq!(
+            bytes,
+            &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn test_from_bytes() {
+        let bytes = vec![1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0];
+        let values: Vec<i32> = unsafe { from_bytes(bytes) };
+        assert_eq!(values, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_to_nbytes() {
+        assert_eq!(to_nbytes::<i32>(5), 20);
+    }
+}
