@@ -17,7 +17,8 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
 ///
 /// # Safety
 ///
-/// The caller must ensure that `bytes` is a valid slice of `T`, that is
+/// The caller must ensure to check the [`Vec::from_raw_parts`] contract, and that
+/// `bytes` is a valid slice of `T`, which means:
 /// - the bytes are representing valid `T` values
 /// - the length of `bytes` is a multiple of the size of `T`
 #[inline]
