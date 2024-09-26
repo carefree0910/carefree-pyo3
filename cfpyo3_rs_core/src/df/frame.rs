@@ -1,8 +1,8 @@
-use crate::toolkit::array::AFloat;
-
 use super::{ColumnsDtype, IndexDtype};
+use crate::toolkit::array::AFloat;
 use numpy::{ndarray::CowArray, Ix1, Ix2};
 
+mod io;
 mod meta;
 mod ops;
 
