@@ -7,7 +7,6 @@ use crate::{
 };
 use bytes::BufMut;
 use numpy::ndarray::{Array1, Array2};
-use std::mem;
 
 fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
     let (target, remain) = bytes.split_at(to_nbytes::<i64>(1));
@@ -46,11 +45,9 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     ///
     /// Please ensure that the `bytes` is returned from the [`DataFrame::to_bytes`] method.
     pub unsafe fn from_bytes(bytes: Vec<u8>) -> Self {
-        let original = bytes;
-        let bytes = original.as_slice();
+        let bytes = bytes.leak();
         let (bytes, index_nbytes) = extract_usize(bytes);
         let (bytes, columns_nbytes) = extract_usize(bytes);
-
         let index_shape = index_nbytes / 8;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
@@ -63,8 +60,6 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let (_, values_vec) = extract_vec::<T>(bytes, values_nbytes);
         let values_array =
             Array2::<T>::from_shape_vec((index_shape, columns_shape), values_vec).unwrap();
-
-        mem::forget(original);
 
         DataFrame::new(
             index_array.into(),
