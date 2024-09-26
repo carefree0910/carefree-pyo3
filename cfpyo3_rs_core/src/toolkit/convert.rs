@@ -4,12 +4,13 @@ use core::mem::size_of;
 ///
 /// # Safety
 ///
-/// The caller must ensure that the `values` lives longer than the returned
-/// bytes representation, otherwise it will cause undefined behavior.
+/// This is basically a shortcut of `slice::align_to`, but the caller must ensure
+/// that `values` is 'exactly' a slice of `T`, because we only take the second part
+/// of the tuple returned by `align_to` (that is, assuming the 'prefix' and 'suffix'
+/// are both empty).
 #[inline]
 pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
-    let nbytes = values.len() * size_of::<T>();
-    unsafe { core::slice::from_raw_parts(values.as_ptr() as *mut u8, nbytes) }
+    unsafe { values.align_to().1 }
 }
 
 /// convert bytes into <T> values, in a complete zero-copy way
