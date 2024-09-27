@@ -62,6 +62,13 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
                 .into(),
         )
     }
+
+    pub fn to_owned(self) -> Self {
+        let index = self.index.into_owned();
+        let columns = self.columns.into_owned();
+        let values = self.values.into_owned();
+        Self::new(index.into(), columns.into(), values.into())
+    }
 }
 
 pub const DF_ALIGN: usize = align_of::<DataFrame<f64>>();
