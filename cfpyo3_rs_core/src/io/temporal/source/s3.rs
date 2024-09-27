@@ -16,7 +16,7 @@ struct S3Client<T: AFloat> {
 impl<T: AFloat> S3Client<T> {
     pub async fn read(&self, key: &str) -> Result<DataFrame<T>> {
         let mut rv = self.op.read(key).await?;
-        let df = unsafe { DataFrame::from_opendal(&mut rv) };
+        let df = unsafe { DataFrame::from_buffer(&mut rv) };
         Ok(df)
     }
 
