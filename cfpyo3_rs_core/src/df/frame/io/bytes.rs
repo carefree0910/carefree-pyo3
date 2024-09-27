@@ -107,6 +107,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
 pub(super) mod tests {
     use super::*;
 
+    // it leaks some tiny bits of memory, but it's fine for testing
     pub fn get_test_df<'a>() -> DataFrame<'a, f32> {
         let mut index_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; INDEX_NBYTES / DF_ALIGN];
         index_vec[0][0] = 1;
@@ -115,7 +116,7 @@ pub(super) mod tests {
         let mut values_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; 1];
         values_vec[0][0] = 3;
 
-        unsafe {
+        let df = unsafe {
             DataFrame::<f32>::from(
                 index_vec.as_ptr() as *const u8,
                 1,
@@ -123,7 +124,13 @@ pub(super) mod tests {
                 1,
                 values_vec.as_ptr() as *const u8,
             )
-        }
+        };
+
+        forget(index_vec);
+        forget(columns_vec);
+        forget(values_vec);
+
+        df
     }
 
     #[test]
