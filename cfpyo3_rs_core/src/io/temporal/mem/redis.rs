@@ -44,11 +44,11 @@ fn init_client(urls: Vec<String>) -> Mutex<ClusterClient> {
             .password(password)
             .connection_timeout(connection_timeout)
             .build()
-            .expect(format!("failed to connect to redis cluster at '{:?}'", urls).as_str()),
+            .unwrap_or_else(|_| panic!("failed to connect to redis cluster at '{:?}'", urls)),
     )
 }
 
-fn roll_pool_idx(cursor: &Mutex<Cursor>, pool: &Vec<Option<Mutex<ClusterConnection>>>) -> usize {
+fn roll_pool_idx(cursor: &Mutex<Cursor>, pool: &[Option<Mutex<ClusterConnection>>]) -> usize {
     let mut cursor = cursor.lock().unwrap();
     let current = cursor.0;
     for i in 0..pool.len() {
@@ -89,7 +89,7 @@ impl<T: AFloat> RedisClient<T> {
                 (Some(cluster), Some(pool)) => {
                     pool.iter_mut().for_each(|conn| {
                         if conn.is_none() {
-                            let new_conn = cluster.lock().unwrap().get_connection();
+                            let new_conn = cluster.get_mut().unwrap().get_connection();
                             match new_conn {
                                 Ok(new_conn) => {
                                     *conn = Some(Mutex::new(new_conn));
@@ -177,8 +177,7 @@ impl<T: AFloat> RedisClient<T> {
                 Ok(rv
                     .into_iter()
                     .map(|bytes| unsafe { from_bytes(bytes) })
-                    .into_iter()
-                    .map(|vec| Array1::from(vec))
+                    .map(Array1::from)
                     .collect())
             }
         }
@@ -194,6 +193,11 @@ impl<T: AFloat> RedisClient<T> {
         self.trackers.reset()
     }
 }
+impl<T: AFloat> Default for RedisClient<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 // public interface
 
@@ -203,14 +207,11 @@ impl<T: AFloat> RedisClient<T> {
 ///   - it can, however, be either row-contiguous or column-contiguous
 pub struct RedisFetcher<'a, T: AFloat> {
     client: &'a RedisClient<T>,
-    pub redis_keys: &'a Vec<&'a ArrayView1<'a, RedisKey>>,
+    pub redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
 }
 
 impl<'a, T: AFloat> RedisFetcher<'a, T> {
-    pub fn new(
-        client: &'a RedisClient<T>,
-        redis_keys: &'a Vec<&'a ArrayView1<'a, RedisKey>>,
-    ) -> Self {
+    pub fn new(client: &'a RedisClient<T>, redis_keys: &'a [&'a ArrayView1<'a, RedisKey>]) -> Self {
         Self { client, redis_keys }
     }
 }

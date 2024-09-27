@@ -113,7 +113,7 @@ pub fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
         },
     );
     if let Some(current_tasks) = current_tasks.take() {
-        if current_tasks.0.len() > 0 {
+        if !current_tasks.0.is_empty() {
             tasks.push(current_tasks);
         }
     }

@@ -12,12 +12,14 @@
 //!
 //! the general workflow of a complete mem-data fetching process is as follows:
 //! 1. determine a data fetching schema based on the format of the underlying mem-data
-//! (e.g., row-contiguous or column-contiguous)
+//!    (e.g., row-contiguous or column-contiguous)
 //! 2. separate the final task into tiny tasks, each of which will fetch a small slice of data
 //! > the 'slice' here indicates a continuous piece of data laid out in memory
 //! 3. create a `Fetcher` for each tiny task
 //!
 //! this module focuses on the first two steps, and the final step is implemented in sub-modules.
+
+#![allow(clippy::too_many_arguments)]
 
 use crate::{
     df::ColumnsDtype,
@@ -48,7 +50,7 @@ pub mod shm;
 /// # concepts
 ///
 /// - `compact data`: we assume that the data of each date is flattened
-/// and then concatenated into a single array, and this array is called `compact data`
+///   and then concatenated into a single array, and this array is called `compact data`
 /// - `date data`: the flattened data of the specific date
 ///
 /// # fields
@@ -101,7 +103,7 @@ pub trait AsyncFetcher<T: AFloat> {
 fn searchsorted<T: Ord>(arr: &ArrayView1<T>, value: &T) -> usize {
     arr.as_slice()
         .unwrap()
-        .binary_search(&value)
+        .binary_search(value)
         .unwrap_or_else(|x| x)
 }
 
@@ -120,11 +122,11 @@ fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
     }
 
     let mut unique_values: Vec<i64> = counts.keys().cloned().collect();
-    unique_values.sort_by(|a, b| a.cmp(b));
+    unique_values.sort();
 
     let counts: Vec<i64> = unique_values.iter().map(|&value| counts[&value]).collect();
 
-    return (Array1::from(unique_values), Array1::from(counts));
+    (Array1::from(unique_values), Array1::from(counts))
 }
 
 /// a typically useful function for random-fetching temporal row-contiguous data.
@@ -182,7 +184,7 @@ pub fn row_contiguous<'a, T, F0, F1>(
         let columns_per_day = Vec::from_iter(unique_date_idxs.iter().map(|&date_idx| {
             let start_idx = date_columns_offset[date_idx as usize];
             let end_idx = date_columns_offset[(date_idx + 1) as usize];
-            return columns_getter(start_idx, end_idx);
+            columns_getter(start_idx, end_idx)
         }));
         let num_columns_per_day = Array1::from_iter(columns_per_day.iter().map(|x| x.len() as i64));
         let num_columns = columns.len();
@@ -194,10 +196,10 @@ pub fn row_contiguous<'a, T, F0, F1>(
         };
 
         #[inline(always)]
-        fn fill_data<'a, T: AFloat>(
+        fn fill_data<T: AFloat>(
             time_idx: i64,
             column_idx: usize,
-            data: ArrayView1<'a, T>,
+            data: ArrayView1<'_, T>,
             flattened: &mut [T],
             num_columns: usize,
         ) {
@@ -221,14 +223,14 @@ pub fn row_contiguous<'a, T, F0, F1>(
                     }
                 });
                 let selected_data = data_getter(start_idx + cursor, start_idx + cursor_end)
-                    .into_shape((date_count as usize, columns_len as usize))
+                    .into_shape((date_count as usize, columns_len))
                     .unwrap();
                 let selected_data = selected_data.t();
                 zip(corrected_columns_idx, columns_idx)
                     .enumerate()
                     .for_each(|(i, (corrected_idx, idx))| {
-                        if date_columns[corrected_idx as usize] == columns[i] {
-                            let i_selected_data = selected_data.row(idx as usize);
+                        if date_columns[corrected_idx] == columns[i] {
+                            let i_selected_data = selected_data.row(idx);
                             fill_data(time_idx, i, i_selected_data, flattened, num_columns)
                         } else {
                             let nan_data = vec![T::nan(); date_count as usize];
@@ -346,7 +348,7 @@ impl<'a> CachedGetter<'a> {
     fn new(columns: &'a ArrayView1<'a, ColumnsDtype>) -> Self {
         Self(Arc::new(Mutex::new(HashMap::new())), columns)
     }
-    fn new_vec(columns: &Vec<&'a ArrayView1<'a, ColumnsDtype>>) -> Vec<Self> {
+    fn new_vec(columns: &[&'a ArrayView1<'a, ColumnsDtype>]) -> Vec<Self> {
         columns.iter().map(|x| Self::new(x)).collect()
     }
     fn clone(&self) -> Self {
@@ -390,7 +392,7 @@ impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
 /// - `columns_getter` - the getter function for columns, args: `(start_idx, end_idx)`.
 /// - `columns_indices_getter` - the getter function for columns indices, args: `(i, date_columns)`.
 /// > it should in fact return `searchsorted_array(&date_columns.view(), columns)`, but we provide
-///   this interface so you can optimize the performance by caching the result (depends on `i`).
+/// > this interface so you can optimize the performance by caching the result (depends on `i`).
 /// - `data_getter` - the getter function for data, args: `(start_idx, end_idx)`.
 /// - `flattened` (`datetime_len * columns.len()`) - the flattened array to fill.
 /// - `multiplier` - the multiplier for each data item. normally, a data item is a simple fp32,
@@ -425,14 +427,14 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
     if full_index[time_end_idx] != datetime_end {
         panic!("`datetime_index` is not continuous")
     } else {
-        let start_date_idx = time_idx_to_date_idx[time_start_idx as usize];
-        let end_date_idx = time_idx_to_date_idx[time_end_idx as usize];
+        let start_date_idx = time_idx_to_date_idx[time_start_idx];
+        let end_date_idx = time_idx_to_date_idx[time_end_idx];
         let start_idx = date_columns_offset[start_date_idx as usize] * num_ticks_per_day;
         let unique_date_idxs = Vec::from_iter(start_date_idx..=end_date_idx);
         let columns_per_day = Vec::from_iter(unique_date_idxs.iter().map(|&date_idx| {
             let start_idx = date_columns_offset[date_idx as usize];
             let end_idx = date_columns_offset[(date_idx + 1) as usize];
-            return columns_getter(start_idx, end_idx);
+            columns_getter(start_idx, end_idx)
         }));
         let num_columns_per_day: Vec<usize> = columns_per_day.iter().map(|x| x.len()).collect();
         let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match offsets {
@@ -463,20 +465,17 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
             None => 0,
             Some(Offsets { column_offset, .. }) => column_offset,
         };
-        let total_multiplier = match multiplier {
-            None => None,
-            Some(multiplier) => Some(
-                multiplier
-                    + match offsets {
-                        None => 0,
-                        Some(Offsets {
-                            channel_pad_start,
-                            channel_pad_end,
-                            ..
-                        }) => channel_pad_start + channel_pad_end,
-                    },
-            ),
-        };
+        let total_multiplier = multiplier.map(|multiplier| {
+            multiplier
+                + match offsets {
+                    None => 0,
+                    Some(Offsets {
+                        channel_pad_start,
+                        channel_pad_end,
+                        ..
+                    }) => channel_pad_start + channel_pad_end,
+                }
+        });
         columns_per_day
             .iter()
             .enumerate()
@@ -585,14 +584,14 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
     if full_index[time_end_idx] != datetime_end {
         panic!("`datetime_index` is not continuous")
     } else {
-        let start_date_idx = time_idx_to_date_idx[time_start_idx as usize];
-        let end_date_idx = time_idx_to_date_idx[time_end_idx as usize];
+        let start_date_idx = time_idx_to_date_idx[time_start_idx];
+        let end_date_idx = time_idx_to_date_idx[time_end_idx];
         let start_idx = date_columns_offset[start_date_idx as usize] * num_ticks_per_day;
         let unique_date_idxs = Vec::from_iter(start_date_idx..=end_date_idx);
         let columns_per_day = Vec::from_iter(unique_date_idxs.iter().map(|&date_idx| {
             let start_idx = date_columns_offset[date_idx as usize];
             let end_idx = date_columns_offset[(date_idx + 1) as usize];
-            return columns_getter(start_idx, end_idx);
+            columns_getter(start_idx, end_idx)
         }));
         let num_columns_per_day: Vec<usize> = columns_per_day.iter().map(|x| x.len()).collect();
         let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match offsets {
@@ -623,20 +622,17 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
             None => 0,
             Some(Offsets { column_offset, .. }) => column_offset,
         };
-        let total_multiplier = match multiplier {
-            None => None,
-            Some(multiplier) => Some(
-                multiplier
-                    + match offsets {
-                        None => 0,
-                        Some(Offsets {
-                            channel_pad_start,
-                            channel_pad_end,
-                            ..
-                        }) => channel_pad_start + channel_pad_end,
-                    },
-            ),
-        };
+        let total_multiplier = multiplier.map(|multiplier| {
+            multiplier
+                + match offsets {
+                    None => 0,
+                    Some(Offsets {
+                        channel_pad_start,
+                        channel_pad_end,
+                        ..
+                    }) => channel_pad_start + channel_pad_end,
+                }
+        });
         let mut tasks = Vec::new();
         let mut f_start_indices = Vec::new();
         columns_per_day
@@ -674,7 +670,7 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
                             f_start_idx *= total_multiplier;
                         }
                         let f_start_idx = f_start_idx as usize;
-                        if date_columns[corrected_idx as usize] == columns[j] {
+                        if date_columns[corrected_idx] == columns[j] {
                             let col_offset = corrected_idx as i64 * num_ticks_per_day;
                             let args = FetcherArgs {
                                 c,
@@ -820,16 +816,16 @@ pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
 
 /// a batched version of `shm_column_contiguous`.
 pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
-    datetime_start: &Vec<i64>,
-    datetime_end: &Vec<i64>,
+    datetime_start: &[i64],
+    datetime_end: &[i64],
     datetime_len: i64,
-    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
+    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &Vec<&ArrayView1<i64>>,
-    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
-    date_columns_offset: &Vec<&ArrayView1<i64>>,
-    compact_columns: &Vec<&ArrayView1<ColumnsDtype>>,
-    compact_data: &Vec<&'a ArrayView1<'a, T>>,
+    full_index: &[&ArrayView1<i64>],
+    time_idx_to_date_idx: &[&ArrayView1<i64>],
+    date_columns_offset: &[&ArrayView1<i64>],
+    compact_columns: &[&ArrayView1<ColumnsDtype>],
+    compact_data: &[&'a ArrayView1<'a, T>],
     num_threads: usize,
 ) -> Vec<T> {
     let nc = compact_data.len();
@@ -921,7 +917,7 @@ pub fn shm_sliced_column_contiguous<'a, 'b, T: AFloat>(
     time_idx_to_date_idx: &ArrayView1<i64>,
     date_columns_offset: &ArrayView1<i64>,
     compact_columns: &ArrayView1<ColumnsDtype>,
-    sliced_data: &'a Vec<&'a ArrayView1<'a, T>>,
+    sliced_data: &'a [&'a ArrayView1<'a, T>],
     multiplier: Option<i64>,
 ) -> Vec<T> {
     let mut flattened =
@@ -949,16 +945,16 @@ pub fn shm_sliced_column_contiguous<'a, 'b, T: AFloat>(
 
 /// a batched version of `shm_sliced_column_contiguous`.
 pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
-    datetime_start: &Vec<i64>,
-    datetime_end: &Vec<i64>,
+    datetime_start: &[i64],
+    datetime_end: &[i64],
     datetime_len: i64,
-    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
+    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &Vec<&ArrayView1<i64>>,
-    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
-    date_columns_offset: &Vec<&ArrayView1<i64>>,
-    compact_columns: &Vec<&ArrayView1<ColumnsDtype>>,
-    sliced_data: &'a Vec<&Vec<&'a ArrayView1<'a, T>>>,
+    full_index: &[&ArrayView1<i64>],
+    time_idx_to_date_idx: &[&ArrayView1<i64>],
+    date_columns_offset: &[&ArrayView1<i64>],
+    compact_columns: &[&ArrayView1<ColumnsDtype>],
+    sliced_data: &'a [&[&'a ArrayView1<'a, T>]],
     num_threads: usize,
 ) -> Vec<T> {
     let nc = sliced_data.len();
@@ -1018,16 +1014,16 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
 
 /// a batched & grouped version of `shm_sliced_column_contiguous`.
 pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
-    datetime_start: &Vec<i64>,
-    datetime_end: &Vec<i64>,
+    datetime_start: &[i64],
+    datetime_end: &[i64],
     datetime_len: i64,
-    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
+    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
     date_columns_offset: &ArrayView1<i64>,
     compact_columns: &ArrayView1<ColumnsDtype>,
-    sliced_data: &'a Vec<&'a ArrayView1<'a, T>>,
+    sliced_data: &'a [&'a ArrayView1<'a, T>],
     num_threads: usize,
     num_groups: i64,
 ) -> Vec<T> {
@@ -1083,16 +1079,16 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
 /// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
 #[cfg(feature = "io-mem-redis")]
 pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
-    datetime_start: &Vec<i64>,
-    datetime_end: &Vec<i64>,
+    datetime_start: &[i64],
+    datetime_end: &[i64],
     datetime_len: i64,
-    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
+    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &Vec<&ArrayView1<i64>>,
-    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
-    date_columns_offset: &Vec<&ArrayView1<i64>>,
-    compact_columns: &Vec<&ArrayView1<ColumnsDtype>>,
-    redis_keys: &'a Vec<&'a ArrayView1<'a, RedisKey>>,
+    full_index: &[&ArrayView1<i64>],
+    time_idx_to_date_idx: &[&ArrayView1<i64>],
+    date_columns_offset: &[&ArrayView1<i64>],
+    compact_columns: &[&ArrayView1<ColumnsDtype>],
+    redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
     num_threads: usize,
 ) -> Vec<T> {
@@ -1138,7 +1134,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                             date_columns_offset,
                             columns_getter,
                             columns_indices_getter,
-                            RedisFetcher::new(&redis_client, redis_keys),
+                            RedisFetcher::new(redis_client, redis_keys),
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
                             None,
@@ -1153,18 +1149,18 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
 /// a grouped version of `redis_column_contiguous`.
 #[cfg(feature = "io-mem-redis")]
 pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
-    datetime_start: &Vec<i64>,
-    datetime_end: &Vec<i64>,
+    datetime_start: &[i64],
+    datetime_end: &[i64],
     datetime_len: i64,
-    columns: &Vec<&'b ArrayView1<'b, ColumnsDtype>>,
+    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &Vec<&ArrayView1<i64>>,
-    time_idx_to_date_idx: &Vec<&ArrayView1<i64>>,
-    date_columns_offset: &Vec<&ArrayView1<i64>>,
-    compact_columns: &Vec<&ArrayView1<ColumnsDtype>>,
-    redis_keys: &'a Vec<&'a ArrayView1<'a, RedisKey>>,
+    full_index: &[&ArrayView1<i64>],
+    time_idx_to_date_idx: &[&ArrayView1<i64>],
+    date_columns_offset: &[&ArrayView1<i64>],
+    compact_columns: &[&ArrayView1<ColumnsDtype>],
+    redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
-    multipliers: &Vec<i64>,
+    multipliers: &[i64],
     num_threads: usize,
 ) -> Vec<T> {
     let bz = datetime_start.len();
@@ -1493,14 +1489,14 @@ mod tests {
             0, 1, 2, 3, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6
         ]);
         let compact_symbols = compact_symbols.view();
-        let sliced_data = vec![
+        let sliced_data = [
             Array::from_iter((0..8).map(|x| x as f32)),
             Array::from_iter((8..18).map(|x| x as f32)),
             Array::from_iter((18..30).map(|x| x as f32)),
             Array::from_iter((30..44).map(|x| x as f32)),
         ];
         let sliced_data = sliced_data.iter().map(|x| x.view()).collect::<Vec<_>>();
-        let sliced_data = sliced_data.iter().map(|x| x).collect::<Vec<_>>();
+        let sliced_data = sliced_data.iter().collect::<Vec<_>>();
 
         let flattened = shm_sliced_column_contiguous(
             datetime_start,

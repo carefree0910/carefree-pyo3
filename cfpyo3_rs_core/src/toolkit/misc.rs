@@ -65,6 +65,11 @@ impl Tracker {
         }
     }
 }
+impl Default for Tracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl fmt::Debug for Statics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let sum = self.n as f64 * self.mean;
@@ -146,31 +151,22 @@ impl NamedTrackers {
         )
     }
 
-    pub fn track(&self, name: &str, time: f64) {
+    fn get(&self, name: &str) -> &RwLock<Tracker> {
         self.0
             .get(name)
-            .expect(format!("'{}' not found in current trackers", name).as_str())
-            .write()
-            .unwrap()
-            .track(time);
+            .unwrap_or_else(|| panic!("'{}' not found in current trackers", name))
+    }
+
+    pub fn track(&self, name: &str, time: f64) {
+        self.get(name).write().unwrap().track(time);
     }
 
     pub fn track_start(&self, name: &str) {
-        self.0
-            .get(name)
-            .expect(format!("'{}' not found in current trackers", name).as_str())
-            .write()
-            .unwrap()
-            .track_start();
+        self.get(name).write().unwrap().track_start();
     }
 
     pub fn track_end(&self, name: &str) {
-        self.0
-            .get(name)
-            .expect(format!("'{}' not found in current trackers", name).as_str())
-            .write()
-            .unwrap()
-            .track_end();
+        self.get(name).write().unwrap().track_end();
     }
 
     pub fn reset(&self) {

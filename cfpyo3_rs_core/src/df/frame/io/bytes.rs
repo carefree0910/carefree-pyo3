@@ -39,14 +39,14 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     /// This method returns a [`Vec<u8>`], but the underlying data is shared with the [`DataFrame`].
     ///
     /// - Its purpose is to provide a convenient interface for you to serialize the [`DataFrame`] to bytes
-    /// without copying the data, so you can further write them to a file or send them over the network. It
-    /// is generally NOT supposed to be used for any other purpose.
+    ///   without copying the data, so you can further write them to a file or send them over the network. It
+    ///   is generally NOT supposed to be used for any other purpose.
     /// - Since [`Vec<u8>`] is a owned type, double free is possible if you drop both the returned [`Vec<u8>`]
-    /// and the underlying [`DataFrame`]. Please make sure that the returned [`Vec<u8>`] is consumed, or call
-    /// [`forget`] on it when necessary.
+    ///   and the underlying [`DataFrame`]. Please make sure that the returned [`Vec<u8>`] is consumed, or call
+    ///   [`forget`] on it when necessary.
     ///
     /// > This method assumes that the alignment of [`DataFrame<f64>`] ([`DF_ALIGN`]) is ≤ 8. This assumption
-    /// should be handled internally, and you should not worry about it.
+    /// > should be handled internally, and you should not worry about it.
     pub unsafe fn to_bytes(&self) -> Vec<u8> {
         let index = &self.index;
         let columns = &self.columns;

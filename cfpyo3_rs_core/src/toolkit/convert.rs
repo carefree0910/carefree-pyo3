@@ -19,8 +19,8 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
 ///
 /// The caller must ensure to check the [`Vec::from_raw_parts`] contract, and that
 /// `bytes` is a valid slice of `T`, which means:
-/// - the bytes are representing valid `T` values
-/// - the length of `bytes` is a multiple of the size of `T`
+/// - the bytes are representing valid `T` values.
+/// - the length of `bytes` is a multiple of the size of `T`.
 #[inline]
 pub unsafe fn from_bytes<T: Sized>(bytes: Vec<u8>) -> Vec<T> {
     let values_len = bytes.len() / size_of::<T>();

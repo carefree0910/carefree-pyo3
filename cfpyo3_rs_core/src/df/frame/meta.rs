@@ -20,6 +20,13 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
             values,
         }
     }
+
+    /// # Safety
+    ///
+    /// This function requires that:
+    /// - pointers are aligned with [`DF_ALIGN`].
+    /// - pointers are representing the corresponding data types (i.e., [`IndexDtype`], [`ColumnsDtype`], and `T`).
+    /// - the 'owners' of the pointers should be forgotten, or should not be freed before the [`DataFrame`] is dropped.
     pub unsafe fn from(
         index_ptr: *const u8,
         index_shape: usize,

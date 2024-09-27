@@ -22,12 +22,12 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
         let index_bytes = extract_bytes(buf, index_nbytes);
-        let index_ptr = index_bytes.as_ptr() as *const u8;
+        let index_ptr = index_bytes.as_ptr();
         let columns_bytes = extract_bytes(buf, columns_nbytes);
-        let columns_ptr = columns_bytes.as_ptr() as *const u8;
+        let columns_ptr = columns_bytes.as_ptr();
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
         let values_bytes = extract_bytes(buf, values_nbytes);
-        let values_ptr = values_bytes.as_ptr() as *const u8;
+        let values_ptr = values_bytes.as_ptr();
 
         core::mem::forget(index_bytes);
         core::mem::forget(columns_bytes);
