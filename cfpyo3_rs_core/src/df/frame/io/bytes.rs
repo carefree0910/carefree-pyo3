@@ -1,20 +1,36 @@
 use crate::{
-    df::{frame::DataFrame, ColumnsDtype, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES},
+    df::{
+        frame::{
+            meta::{align_nbytes, DF_ALIGN},
+            DataFrame,
+        },
+        ColumnsDtype, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES,
+    },
     toolkit::{
         array::AFloat,
         convert::{to_bytes, to_nbytes},
     },
 };
 use bytes::BufMut;
+use core::mem::forget;
 
 fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
     let (target, remain) = bytes.split_at(to_nbytes::<i64>(1));
-    let value = i64::from_be_bytes(target.try_into().unwrap());
+    let value = i64::from_le_bytes(target.try_into().unwrap());
     (remain, value as usize)
 }
 fn extract_ptr(bytes: &[u8], nbytes: usize) -> (&[u8], *const u8) {
     let (target, remain) = bytes.split_at(nbytes);
     (remain, target.as_ptr())
+}
+
+fn put_aligned_slice(bytes: &mut Vec<u8>, slice: &[u8]) {
+    bytes.put_slice(slice);
+    let remainder = slice.len() % DF_ALIGN;
+    if remainder != 0 {
+        let padding = DF_ALIGN - remainder;
+        bytes.put_slice(&[0u8; DF_ALIGN][..padding]);
+    }
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -27,21 +43,36 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     /// is generally NOT supposed to be used for any other purpose.
     /// - Since [`Vec<u8>`] is a owned type, double free is possible if you drop both the returned [`Vec<u8>`]
     /// and the underlying [`DataFrame`]. Please make sure that the returned [`Vec<u8>`] is consumed, or call
-    /// [`core::mem::forget`] on it when necessary.
+    /// [`forget`] on it when necessary.
+    ///
+    /// > This method assumes that the alignment of [`DataFrame<f64>`] ([`DF_ALIGN`]) is ≤ 8. This assumption
+    /// should be handled internally, and you should not worry about it.
     pub unsafe fn to_bytes(&self) -> Vec<u8> {
         let index = &self.index;
         let columns = &self.columns;
         let values = &self.values;
         let index_nbytes = to_nbytes::<IndexDtype>(index.len());
         let columns_nbytes = to_nbytes::<ColumnsDtype>(columns.len());
-        let total_nbytes = index_nbytes + columns_nbytes + to_nbytes::<T>(values.len());
-        let mut bytes: Vec<u8> = Vec::with_capacity(total_nbytes + 16);
-        bytes.put_i64(index_nbytes as i64);
-        bytes.put_i64(columns_nbytes as i64);
+        let values_nbytes = to_nbytes::<T>(values.len());
+
+        let index_aligned_nbytes = align_nbytes(index_nbytes);
+        let columns_aligned_nbytes = align_nbytes(columns_nbytes);
+        let values_aligned_nbytes = align_nbytes(values_nbytes);
+        let total_aligned_nbytes =
+            index_aligned_nbytes + columns_aligned_nbytes + values_aligned_nbytes + 16;
+        let aligned_bytes: Vec<[u8; DF_ALIGN]> =
+            Vec::with_capacity(total_aligned_nbytes / DF_ALIGN);
+        let mut bytes: Vec<u8> = unsafe {
+            Vec::from_raw_parts(aligned_bytes.as_ptr() as *mut u8, 0, total_aligned_nbytes)
+        };
+        forget(aligned_bytes);
+
+        bytes.put_i64_le(index_nbytes as i64);
+        bytes.put_i64_le(columns_nbytes as i64);
         unsafe {
-            bytes.put_slice(to_bytes(index.as_slice().unwrap()));
-            bytes.put_slice(to_bytes(columns.as_slice().unwrap()));
-            bytes.put_slice(to_bytes(values.as_slice().unwrap()));
+            put_aligned_slice(&mut bytes, to_bytes(index.as_slice().unwrap()));
+            put_aligned_slice(&mut bytes, to_bytes(columns.as_slice().unwrap()));
+            put_aligned_slice(&mut bytes, to_bytes(values.as_slice().unwrap()));
         };
         bytes
     }
@@ -93,11 +124,11 @@ mod tests {
             assert_eq!(
                 bytes,
                 [
-                    0, 0, 0, 0, 0, 0, 0, 8,
-                    0, 0, 0, 0, 0, 0, 0, 32,
+                    8, 0, 0, 0, 0, 0, 0, 0,
+                    32, 0, 0, 0, 0, 0, 0, 0,
                     1, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    1, 0, 0, 0,
+                    1, 0, 0, 0, 0, 0, 0, 0,
                 ]
             );
         };

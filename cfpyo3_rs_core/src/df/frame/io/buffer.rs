@@ -1,3 +1,4 @@
+use crate::df::frame::meta::align_nbytes;
 use crate::df::frame::DataFrame;
 use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
@@ -6,7 +7,12 @@ use bytes::Buf;
 
 fn extract_ptr(buf: &mut impl Buf, nbytes: usize) -> *const u8 {
     // `advance` will happen inside `copy_to_bytes`
-    buf.copy_to_bytes(nbytes).as_ptr()
+    let ptr = buf.copy_to_bytes(nbytes).as_ptr();
+    let aligned = align_nbytes(nbytes);
+    if aligned > nbytes {
+        buf.advance(aligned - nbytes);
+    }
+    ptr
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -14,8 +20,8 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     ///
     /// Please ensure that the `buf` represents bytes returned from the [`DataFrame::to_bytes`] method.
     pub unsafe fn from_buffer(buf: &mut impl Buf) -> Self {
-        let index_nbytes = buf.get_i64() as usize;
-        let columns_nbytes = buf.get_i64() as usize;
+        let index_nbytes = buf.get_i64_le() as usize;
+        let columns_nbytes = buf.get_i64_le() as usize;
 
         let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;

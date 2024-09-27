@@ -40,3 +40,13 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         Self::new(index.into(), columns.into(), values.into())
     }
 }
+
+pub const DF_ALIGN: usize = align_of::<DataFrame<f64>>();
+pub fn align_nbytes(nbytes: usize) -> usize {
+    let remainder = nbytes % DF_ALIGN;
+    if remainder == 0 {
+        nbytes
+    } else {
+        nbytes + DF_ALIGN - remainder
+    }
+}
