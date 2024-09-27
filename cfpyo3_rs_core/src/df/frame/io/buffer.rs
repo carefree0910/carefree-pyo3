@@ -5,9 +5,8 @@ use crate::toolkit::convert::to_nbytes;
 use bytes::Buf;
 
 fn extract_ptr(buf: &mut impl Buf, nbytes: usize) -> *const u8 {
-    let ptr = buf.copy_to_bytes(nbytes).as_ptr();
-    buf.advance(nbytes);
-    ptr
+    // `advance` will happen inside `copy_to_bytes`
+    buf.copy_to_bytes(nbytes).as_ptr()
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
