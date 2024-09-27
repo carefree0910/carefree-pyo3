@@ -7,12 +7,7 @@ use bytes::Buf;
 
 fn extract_ptr(buf: &mut impl Buf, nbytes: usize) -> *const u8 {
     // `advance` will happen inside `copy_to_bytes`
-    let ptr = buf.copy_to_bytes(nbytes).as_ptr();
-    let aligned = align_nbytes(nbytes);
-    if aligned > nbytes {
-        buf.advance(aligned - nbytes);
-    }
-    ptr
+    buf.copy_to_bytes(align_nbytes(nbytes)).as_ptr()
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
