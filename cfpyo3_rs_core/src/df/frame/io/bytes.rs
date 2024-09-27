@@ -1,5 +1,5 @@
 use crate::{
-    df::{frame::DataFrame, ColumnsDtype, IndexDtype, COLUMNS_NBYTES},
+    df::{frame::DataFrame, ColumnsDtype, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES},
     toolkit::{
         array::AFloat,
         convert::{to_bytes, to_nbytes},
@@ -54,7 +54,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let (bytes, index_nbytes) = extract_usize(bytes);
         let (bytes, columns_nbytes) = extract_usize(bytes);
 
-        let index_shape = index_nbytes / 8;
+        let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
         let (bytes, index_ptr) = extract_vec(bytes, index_nbytes);

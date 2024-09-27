@@ -1,5 +1,5 @@
 use crate::df::frame::DataFrame;
-use crate::df::COLUMNS_NBYTES;
+use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
 use crate::toolkit::convert::to_nbytes;
 use bytes::Buf;
@@ -18,7 +18,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let index_nbytes = buf.get_i64() as usize;
         let columns_nbytes = buf.get_i64() as usize;
 
-        let index_shape = index_nbytes / 8;
+        let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
         let index_ptr = extract_vec(buf, index_nbytes);
