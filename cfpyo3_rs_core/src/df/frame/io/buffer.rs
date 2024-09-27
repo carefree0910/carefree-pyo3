@@ -3,11 +3,11 @@ use crate::df::frame::DataFrame;
 use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
 use crate::toolkit::convert::to_nbytes;
-use bytes::Buf;
+use bytes::{Buf, Bytes};
 
-fn extract_ptr(buf: &mut impl Buf, nbytes: usize) -> *const u8 {
+fn extract_bytes(buf: &mut impl Buf, nbytes: usize) -> Bytes {
     // `advance` will happen inside `copy_to_bytes`
-    buf.copy_to_bytes(align_nbytes(nbytes)).as_ptr()
+    buf.copy_to_bytes(align_nbytes(nbytes))
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -21,10 +21,17 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
-        let index_ptr = extract_ptr(buf, index_nbytes);
-        let columns_ptr = extract_ptr(buf, columns_nbytes);
+        let index_bytes = extract_bytes(buf, index_nbytes);
+        let index_ptr = index_bytes.as_ptr() as *const u8;
+        let columns_bytes = extract_bytes(buf, columns_nbytes);
+        let columns_ptr = columns_bytes.as_ptr() as *const u8;
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
-        let values_ptr = extract_ptr(buf, values_nbytes);
+        let values_bytes = extract_bytes(buf, values_nbytes);
+        let values_ptr = values_bytes.as_ptr() as *const u8;
+
+        core::mem::forget(index_bytes);
+        core::mem::forget(columns_bytes);
+        core::mem::forget(values_bytes);
 
         DataFrame::from(
             index_ptr,
