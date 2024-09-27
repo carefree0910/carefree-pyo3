@@ -104,20 +104,31 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
+
+    pub fn get_test_df<'a>() -> DataFrame<'a, f32> {
+        let mut index_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; INDEX_NBYTES / DF_ALIGN];
+        index_vec[0][0] = 1;
+        let mut columns_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; COLUMNS_NBYTES / DF_ALIGN];
+        columns_vec[0][0] = 2;
+        let mut values_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; 1];
+        values_vec[0][0] = 3;
+
+        unsafe {
+            DataFrame::<f32>::from(
+                index_vec.as_ptr() as *const u8,
+                1,
+                columns_vec.as_ptr() as *const u8,
+                1,
+                values_vec.as_ptr() as *const u8,
+            )
+        }
+    }
 
     #[test]
     fn test_bytes_io() {
-        let df = unsafe {
-            DataFrame::<f32>::from(
-                vec![IndexDtype::from(1)].as_ptr() as *const u8,
-                1,
-                vec![ColumnsDtype::from([0u8; COLUMNS_NBYTES])].as_ptr() as *const u8,
-                1,
-                vec![1, 0, 0, 0].as_ptr(),
-            )
-        };
+        let df = get_test_df();
         let bytes = unsafe { df.to_bytes() };
         #[rustfmt::skip]
         {
@@ -127,8 +138,8 @@ mod tests {
                     8, 0, 0, 0, 0, 0, 0, 0,
                     32, 0, 0, 0, 0, 0, 0, 0,
                     1, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    1, 0, 0, 0, 0, 0, 0, 0,
+                    2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    3, 0, 0, 0, 0, 0, 0, 0,
                 ]
             );
         };
