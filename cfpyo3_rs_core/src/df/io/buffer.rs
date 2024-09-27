@@ -7,7 +7,11 @@ use bytes::Buf;
 
 fn extract_bytes<T: Sized>(buf: &mut impl Buf, nbytes: usize) -> Vec<T> {
     // `advance` will happen inside `copy_to_bytes`
-    let vec_u8 = buf.copy_to_bytes(align_nbytes(nbytes)).to_vec();
+    let vec_u8 = buf.copy_to_bytes(nbytes).to_vec();
+    let remainder = align_nbytes(nbytes) - nbytes;
+    if remainder != 0 {
+        buf.advance(remainder);
+    }
     unsafe { from_bytes(vec_u8) }
 }
 
@@ -22,7 +26,9 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     ///
     /// # Safety
     ///
-    /// The safety concern only comes from whether the bytes behind the `buf` is of the desired memory layout.
+    /// The safety concerns come from whether:
+    /// - the bytes behind the `buf` is of the desired memory layout.
+    /// - the `buf` can be fully consumed after loading.
     pub unsafe fn from_buffer(mut buf: impl Buf) -> Self {
         let index_nbytes = buf.get_i64_le() as usize;
         let columns_nbytes = buf.get_i64_le() as usize;
@@ -31,10 +37,14 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
         let index_vec = extract_bytes(&mut buf, index_nbytes).to_vec();
-        let columns_bytes = extract_bytes(&mut buf, columns_nbytes);
-        let columns_vec = columns_bytes.to_vec();
+        let columns_vec = extract_bytes(&mut buf, columns_nbytes).to_vec();
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
         let values_vec = extract_bytes(&mut buf, values_nbytes).to_vec();
+
+        assert!(
+            buf.remaining() == 0,
+            "internal error: buffer not fully consumed"
+        );
 
         DataFrame::from_owned(index_vec, columns_vec, values_vec)
     }
