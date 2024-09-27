@@ -6,6 +6,7 @@ mod io;
 mod meta;
 mod ops;
 
+#[derive(Debug)]
 pub struct DataFrame<'a, T: AFloat> {
     pub index: CowArray<'a, IndexDtype, Ix1>,
     pub columns: CowArray<'a, ColumnsDtype, Ix1>,
