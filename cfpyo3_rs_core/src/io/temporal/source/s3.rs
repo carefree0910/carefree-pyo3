@@ -21,7 +21,8 @@ impl<T: AFloat> S3Client<T> {
     }
 
     pub async fn write(&self, key: &str, df: &DataFrame<'_, T>) -> Result<()> {
-        self.op.write(key, df.to_bytes()).await
+        // the bytes are moved so no double free
+        self.op.write(key, unsafe { df.to_bytes() }).await
     }
 }
 
