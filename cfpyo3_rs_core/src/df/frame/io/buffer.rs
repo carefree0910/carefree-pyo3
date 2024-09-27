@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn test_buffer_io() {
         let df = get_test_df();
-        let bytes = unsafe { df.to_bytes() };
+        let bytes = df.to_bytes();
         let buf = &mut bytes.as_slice();
         let loaded = unsafe { DataFrame::<f32>::from_buffer(buf) };
         assert_eq!(df.index, loaded.index);
