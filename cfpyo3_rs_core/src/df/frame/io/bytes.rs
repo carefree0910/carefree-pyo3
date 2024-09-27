@@ -6,16 +6,15 @@ use crate::{
     },
 };
 use bytes::BufMut;
-use numpy::ndarray::{ArrayView1, ArrayView2};
 
 fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
     let (target, remain) = bytes.split_at(to_nbytes::<i64>(1));
     let value = i64::from_be_bytes(target.try_into().unwrap());
     (remain, value as usize)
 }
-fn extract_vec<T: Sized>(bytes: &[u8], nbytes: usize) -> (&[u8], *const T) {
+fn extract_vec(bytes: &[u8], nbytes: usize) -> (&[u8], *const u8) {
     let (target, remain) = bytes.split_at(nbytes);
-    (remain, target.as_ptr() as *const u8 as *const T)
+    (remain, target.as_ptr())
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -54,23 +53,21 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let bytes = bytes.leak();
         let (bytes, index_nbytes) = extract_usize(bytes);
         let (bytes, columns_nbytes) = extract_usize(bytes);
+
         let index_shape = index_nbytes / 8;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
-        let (bytes, index_ptr) = extract_vec::<IndexDtype>(bytes, index_nbytes);
-        let index_array = ArrayView1::<IndexDtype>::from_shape_ptr((index_shape,), index_ptr);
-        let (bytes, columns_ptr) = extract_vec::<ColumnsDtype>(bytes, columns_nbytes);
-        let columns_array =
-            ArrayView1::<ColumnsDtype>::from_shape_ptr((columns_shape,), columns_ptr);
+        let (bytes, index_ptr) = extract_vec(bytes, index_nbytes);
+        let (bytes, columns_ptr) = extract_vec(bytes, columns_nbytes);
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
-        let (_, values_ptr) = extract_vec::<T>(bytes, values_nbytes);
-        let values_array =
-            ArrayView2::<T>::from_shape_ptr((index_shape, columns_shape), values_ptr);
+        let (_, values_ptr) = extract_vec(bytes, values_nbytes);
 
-        DataFrame::new(
-            index_array.into(),
-            columns_array.into(),
-            values_array.into(),
+        DataFrame::from(
+            index_ptr,
+            index_shape,
+            columns_ptr,
+            columns_shape,
+            values_ptr,
         )
     }
 }

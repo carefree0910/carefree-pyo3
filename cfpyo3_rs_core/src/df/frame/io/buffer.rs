@@ -1,15 +1,13 @@
 use crate::df::frame::DataFrame;
-use crate::df::{ColumnsDtype, IndexDtype, COLUMNS_NBYTES};
+use crate::df::COLUMNS_NBYTES;
 use crate::toolkit::array::AFloat;
-use crate::toolkit::convert::from_bytes;
+use crate::toolkit::convert::to_nbytes;
 use bytes::Buf;
-use numpy::ndarray::{Array1, Array2};
 
-fn extract_vec<T: Sized>(buf: &mut impl Buf, nbytes: usize) -> Vec<T> {
-    let vec_u8 = buf.copy_to_bytes(nbytes).to_vec();
-    let vec = unsafe { from_bytes(vec_u8) };
+fn extract_vec(buf: &mut impl Buf, nbytes: usize) -> *const u8 {
+    let ptr = buf.copy_to_bytes(nbytes).as_ptr();
     buf.advance(nbytes);
-    vec
+    ptr
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -23,27 +21,17 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let index_shape = index_nbytes / 8;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
-        let index_array = Array1::<IndexDtype>::from_shape_vec(
-            (index_shape,),
-            extract_vec::<IndexDtype>(buf, index_nbytes),
-        )
-        .unwrap();
-        let columns_array = Array1::<ColumnsDtype>::from_shape_vec(
-            (columns_shape,),
-            extract_vec::<ColumnsDtype>(buf, columns_nbytes),
-        )
-        .unwrap();
-        let values_nbytes = buf.remaining();
-        let values_array = Array2::<T>::from_shape_vec(
-            (index_shape, columns_shape),
-            extract_vec::<T>(buf, values_nbytes),
-        )
-        .unwrap();
+        let index_ptr = extract_vec(buf, index_nbytes);
+        let columns_ptr = extract_vec(buf, columns_nbytes);
+        let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
+        let values_ptr = extract_vec(buf, values_nbytes);
 
-        DataFrame::new(
-            index_array.into(),
-            columns_array.into(),
-            values_array.into(),
+        DataFrame::from(
+            index_ptr,
+            index_shape,
+            columns_ptr,
+            columns_shape,
+            values_ptr,
         )
     }
 }
