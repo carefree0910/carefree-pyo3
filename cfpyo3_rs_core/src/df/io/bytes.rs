@@ -64,9 +64,15 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         bytes
     }
 
+    /// Create a [`DataFrame`] from a compact bytes slice, which is usually created by the [`DataFrame::to_bytes`] method.
+    ///
+    /// The intention of this method is to create a 'read-only' [`DataFrame`] view. If you need
+    /// an owned [`DataFrame`], you may call [`DataFrame::to_owned`] method on the returned [`DataFrame`].
+    ///
     /// # Safety
     ///
-    /// Please ensure that the `bytes` is returned from the [`DataFrame::to_bytes`] method.
+    /// The safety concern only comes from whether the `bytes` is of the desired memory layout,
+    /// the mutabilities are safe because we borrow the `bytes` immutably and specify the lifetime.
     pub unsafe fn from_bytes(bytes: &'a [u8]) -> Self {
         let (bytes, index_nbytes) = extract_usize(bytes);
         let (bytes, columns_nbytes) = extract_usize(bytes);
