@@ -1,4 +1,4 @@
-use core::mem::size_of;
+use core::mem::{forget, size_of};
 
 /// get a bytes representation of <T> values, in a complete zero-copy way
 ///
@@ -13,22 +13,30 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
     unsafe { values.align_to().1 }
 }
 
-/// convert bytes into <T> values, in a complete zero-copy way
+/// convert an arbitrary [`Vec`] into <T> values, in a complete zero-copy way
 ///
 /// # Safety
 ///
 /// The caller must ensure to check the [`Vec::from_raw_parts`] contract, and that
-/// `bytes` is a valid slice of `T`, which means:
-/// - the bytes are representing valid `T` values.
-/// - the length of `bytes` is a multiple of the size of `T`.
+/// `vec` is a valid slice of `T`, which means:
+/// - the underlying bytes are representing valid `T` values.
+/// - `size_of::<U>() * vec.len()` is a multiple of `size_of::<T>()`.
+#[inline]
+pub unsafe fn from_vec<T: Sized, U>(vec: Vec<U>) -> Vec<T> {
+    let values_len = size_of::<U>() * vec.len() / size_of::<T>();
+    let results = unsafe { Vec::from_raw_parts(vec.as_ptr() as *mut T, values_len, values_len) };
+    forget(vec);
+    results
+}
+
+/// convert bytes into <T> values, in a complete zero-copy way
+///
+/// # Safety
+///
+/// This is a shortcut of [`from_vec`] for [`Vec<u8>`], but it is more intuitive to use.
 #[inline]
 pub unsafe fn from_bytes<T: Sized>(bytes: Vec<u8>) -> Vec<T> {
-    let values_len = bytes.len() / size_of::<T>();
-    unsafe {
-        let vec: Vec<T> = Vec::from_raw_parts(bytes.as_ptr() as *mut T, values_len, values_len);
-        core::mem::forget(bytes);
-        vec
-    }
+    from_vec(bytes)
 }
 
 #[inline]
