@@ -4,7 +4,7 @@ use crate::{
     toolkit::array::AFloat,
 };
 use numpy::{
-    ndarray::{ArrayView1, ArrayView2, CowArray},
+    ndarray::{Array1, Array2, ArrayView1, ArrayView2, CowArray},
     Ix1, Ix2,
 };
 
@@ -45,6 +45,22 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let values =
             ArrayView2::<T>::from_shape_ptr((index_shape, columns_shape), values_ptr as *const T);
         Self::new(index.into(), columns.into(), values.into())
+    }
+
+    pub fn from_owned(index: Vec<IndexDtype>, columns: Vec<ColumnsDtype>, values: Vec<T>) -> Self {
+        let index_shape = index.len();
+        let columns_shape = columns.len();
+        Self::new(
+            Array1::from_shape_vec((index_shape,), index)
+                .unwrap()
+                .into(),
+            Array1::from_shape_vec((columns_shape,), columns)
+                .unwrap()
+                .into(),
+            Array2::from_shape_vec((index_shape, columns_shape), values)
+                .unwrap()
+                .into(),
+        )
     }
 }
 
