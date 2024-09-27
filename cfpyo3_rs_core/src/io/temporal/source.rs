@@ -1,4 +1,4 @@
-use crate::{df::frame::DataFrame, toolkit::array::AFloat};
+use crate::{df::DataFrame, toolkit::array::AFloat};
 use itertools::izip;
 use std::{future::Future, iter::zip};
 

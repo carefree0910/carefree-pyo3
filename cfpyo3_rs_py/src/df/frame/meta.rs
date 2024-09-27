@@ -1,6 +1,5 @@
 use super::DataFrameF64;
-use cfpyo3_core::df::frame::DataFrame;
-use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
+use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
     PyArray1, PyArray2, PyArrayMethods,

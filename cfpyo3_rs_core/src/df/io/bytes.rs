@@ -1,10 +1,10 @@
 use crate::{
     df::{
-        frame::{
+        ColumnsDtype, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES,
+        {
             meta::{align_nbytes, DF_ALIGN},
             DataFrame,
         },
-        ColumnsDtype, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES,
     },
     toolkit::{
         array::AFloat,

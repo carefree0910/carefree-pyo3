@@ -1,5 +1,5 @@
-use crate::df::frame::meta::align_nbytes;
-use crate::df::frame::DataFrame;
+use crate::df::meta::align_nbytes;
+use crate::df::DataFrame;
 use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
 use crate::toolkit::convert::to_nbytes;
@@ -46,7 +46,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::df::frame::io::bytes::tests::get_test_df;
+    use crate::df::io::bytes::tests::get_test_df;
 
     #[test]
     fn test_buffer_io() {
