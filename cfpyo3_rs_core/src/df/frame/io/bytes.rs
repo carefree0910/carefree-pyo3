@@ -106,31 +106,21 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+    use crate::toolkit::convert::from_vec;
 
-    // it leaks some tiny bits of memory, but it's fine for testing
     pub fn get_test_df<'a>() -> DataFrame<'a, f32> {
         let mut index_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; INDEX_NBYTES / DF_ALIGN];
         index_vec[0][0] = 1;
+        let index_vec = unsafe { from_vec(index_vec) };
         let mut columns_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; COLUMNS_NBYTES / DF_ALIGN];
         columns_vec[0][0] = 2;
+        let columns_vec = unsafe { from_vec(columns_vec) };
         let mut values_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; 1];
         values_vec[0][0] = 3;
+        let values_vec = unsafe { from_vec(values_vec) };
+        let values_vec = values_vec[..1].to_vec();
 
-        let df = unsafe {
-            DataFrame::<f32>::from(
-                index_vec.as_ptr() as *const u8,
-                1,
-                columns_vec.as_ptr() as *const u8,
-                1,
-                values_vec.as_ptr() as *const u8,
-            )
-        };
-
-        forget(index_vec);
-        forget(columns_vec);
-        forget(values_vec);
-
-        df
+        DataFrame::<f32>::from_owned(index_vec, columns_vec, values_vec)
     }
 
     #[test]
