@@ -71,3 +71,39 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bytes_io() {
+        let df = unsafe {
+            DataFrame::<f32>::from(
+                vec![IndexDtype::from(1)].as_ptr() as *const u8,
+                1,
+                vec![ColumnsDtype::from([0u8; COLUMNS_NBYTES])].as_ptr() as *const u8,
+                1,
+                vec![1, 0, 0, 0].as_ptr(),
+            )
+        };
+        let bytes = unsafe { df.to_bytes() };
+        #[rustfmt::skip]
+        {
+            assert_eq!(
+                bytes,
+                [
+                    0, 0, 0, 0, 0, 0, 0, 8,
+                    0, 0, 0, 0, 0, 0, 0, 32,
+                    1, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    1, 0, 0, 0,
+                ]
+            );
+        };
+        let loaded = unsafe { DataFrame::<f32>::from_bytes(bytes) };
+        assert_eq!(df.index, loaded.index);
+        assert_eq!(df.columns, loaded.columns);
+        assert_eq!(df.values, loaded.values);
+    }
+}

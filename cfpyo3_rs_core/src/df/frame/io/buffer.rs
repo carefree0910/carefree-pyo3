@@ -34,3 +34,28 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::df::{ColumnsDtype, IndexDtype};
+
+    #[test]
+    fn test_buffer_io() {
+        let df = unsafe {
+            DataFrame::<f32>::from(
+                vec![IndexDtype::from(1)].as_ptr() as *const u8,
+                1,
+                vec![ColumnsDtype::from([0u8; COLUMNS_NBYTES])].as_ptr() as *const u8,
+                1,
+                vec![1, 0, 0, 0].as_ptr(),
+            )
+        };
+        let bytes = unsafe { df.to_bytes() };
+        let buf = &mut bytes.as_slice();
+        let loaded = unsafe { DataFrame::<f32>::from_buffer(buf) };
+        assert_eq!(df.index, loaded.index);
+        assert_eq!(df.columns, loaded.columns);
+        assert_eq!(df.values, loaded.values);
+    }
+}
