@@ -9,5 +9,5 @@ mod ops;
 pub struct DataFrameF64 {
     pub index: Py<PyArray1<IndexDtype>>,
     pub columns: Py<PyArray1<ColumnsDtype>>,
-    pub data: Py<PyArray2<f64>>,
+    pub values: Py<PyArray2<f64>>,
 }

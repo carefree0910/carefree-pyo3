@@ -14,14 +14,14 @@ impl DataFrameF64 {
     pub fn get_columns_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, ColumnsDtype> {
         unsafe { self.columns.bind(py).as_array() }
     }
-    pub fn get_data_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
-        unsafe { self.data.bind(py).as_array() }
+    pub fn get_values_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
+        unsafe { self.values.bind(py).as_array() }
     }
     pub fn to_core<'a>(&'a self, py: Python<'a>) -> DataFrame<'a, f64> {
         let index = self.get_index_array(py);
         let columns = self.get_columns_array(py);
-        let data = self.get_data_array(py);
-        DataFrame::new(index.into(), columns.into(), data.into())
+        let values = self.get_values_array(py);
+        DataFrame::new(index.into(), columns.into(), values.into())
     }
 }
 
@@ -31,12 +31,12 @@ impl DataFrameF64 {
     fn new(
         index: Py<PyArray1<IndexDtype>>,
         columns: Py<PyArray1<ColumnsDtype>>,
-        data: Py<PyArray2<f64>>,
+        values: Py<PyArray2<f64>>,
     ) -> Self {
         DataFrameF64 {
             index,
             columns,
-            data,
+            values,
         }
     }
 
@@ -52,7 +52,7 @@ impl DataFrameF64 {
 
     #[getter]
     fn values(&self, py: Python) -> Py<PyArray2<f64>> {
-        self.data.clone_ref(py)
+        self.values.clone_ref(py)
     }
 
     #[getter]
@@ -63,11 +63,11 @@ impl DataFrameF64 {
         )
     }
 
-    fn with_data(&self, py: Python, data: Py<PyArray2<f64>>) -> Self {
+    fn with_data(&self, py: Python, values: Py<PyArray2<f64>>) -> Self {
         DataFrameF64 {
             index: self.index.clone_ref(py),
             columns: self.columns.clone_ref(py),
-            data,
+            values,
         }
     }
 }

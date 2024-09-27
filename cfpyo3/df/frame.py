@@ -42,9 +42,9 @@ class DataFrame:
     def rows(self, indices: "np.ndarray") -> "DataFrame":
         import numpy as np
 
-        data = np.ascontiguousarray(self._df.values[indices])
         index = np.ascontiguousarray(self._df.index[indices])
-        return DataFrame(DataFrameF64.new(index, self._df.columns, data))
+        values = np.ascontiguousarray(self._df.values[indices])
+        return DataFrame(DataFrameF64.new(index, self._df.columns, values))
 
     def pow(self, exponent: float) -> "DataFrame":
         return DataFrame(self._df.with_data(self._df.values**exponent))

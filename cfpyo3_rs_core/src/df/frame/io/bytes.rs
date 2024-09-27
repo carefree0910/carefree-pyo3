@@ -31,7 +31,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     pub unsafe fn to_bytes(&self) -> Vec<u8> {
         let index = &self.index;
         let columns = &self.columns;
-        let values = &self.data;
+        let values = &self.values;
         let index_nbytes = to_nbytes::<IndexDtype>(index.len());
         let columns_nbytes = to_nbytes::<ColumnsDtype>(columns.len());
         let total_nbytes = index_nbytes + columns_nbytes + to_nbytes::<T>(values.len());
