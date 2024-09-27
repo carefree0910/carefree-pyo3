@@ -12,7 +12,7 @@ fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
     let value = i64::from_be_bytes(target.try_into().unwrap());
     (remain, value as usize)
 }
-fn extract_vec(bytes: &[u8], nbytes: usize) -> (&[u8], *const u8) {
+fn extract_ptr(bytes: &[u8], nbytes: usize) -> (&[u8], *const u8) {
     let (target, remain) = bytes.split_at(nbytes);
     (remain, target.as_ptr())
 }
@@ -57,10 +57,10 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
-        let (bytes, index_ptr) = extract_vec(bytes, index_nbytes);
-        let (bytes, columns_ptr) = extract_vec(bytes, columns_nbytes);
+        let (bytes, index_ptr) = extract_ptr(bytes, index_nbytes);
+        let (bytes, columns_ptr) = extract_ptr(bytes, columns_nbytes);
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
-        let (_, values_ptr) = extract_vec(bytes, values_nbytes);
+        let (_, values_ptr) = extract_ptr(bytes, values_nbytes);
 
         DataFrame::from(
             index_ptr,
