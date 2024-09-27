@@ -93,7 +93,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
         let (_, values_ptr) = extract_ptr(bytes, values_nbytes);
 
-        DataFrame::from(
+        DataFrame::from_ptr(
             index_ptr,
             index_shape,
             columns_ptr,

@@ -33,7 +33,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         core::mem::forget(columns_bytes);
         core::mem::forget(values_bytes);
 
-        DataFrame::from(
+        DataFrame::from_ptr(
             index_ptr,
             index_shape,
             columns_ptr,
