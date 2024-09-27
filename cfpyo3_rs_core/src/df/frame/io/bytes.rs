@@ -67,8 +67,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     /// # Safety
     ///
     /// Please ensure that the `bytes` is returned from the [`DataFrame::to_bytes`] method.
-    pub unsafe fn from_bytes(bytes: Vec<u8>) -> Self {
-        let bytes = bytes.leak();
+    pub unsafe fn from_bytes(bytes: &'a [u8]) -> Self {
         let (bytes, index_nbytes) = extract_usize(bytes);
         let (bytes, columns_nbytes) = extract_usize(bytes);
 
@@ -127,7 +126,7 @@ pub(super) mod tests {
                 ]
             );
         };
-        let loaded = unsafe { DataFrame::<f32>::from_bytes(bytes) };
+        let loaded = unsafe { DataFrame::<f32>::from_bytes(&bytes) };
         assert_eq!(df.index, loaded.index);
         assert_eq!(df.columns, loaded.columns);
         assert_eq!(df.values, loaded.values);
