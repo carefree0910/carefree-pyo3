@@ -32,7 +32,7 @@ pub unsafe fn from_bytes<T: Sized>(bytes: Vec<u8>) -> Vec<T> {
 }
 
 #[inline]
-pub fn to_nbytes<T: Sized>(values_len: usize) -> usize {
+pub const fn to_nbytes<T: Sized>(values_len: usize) -> usize {
     values_len * size_of::<T>()
 }
 
