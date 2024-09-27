@@ -2,24 +2,20 @@ use crate::{
     df::{frame::DataFrame, ColumnsDtype, IndexDtype, COLUMNS_NBYTES},
     toolkit::{
         array::AFloat,
-        convert::{from_bytes, to_bytes, to_nbytes},
+        convert::{to_bytes, to_nbytes},
     },
 };
 use bytes::BufMut;
-use numpy::ndarray::{Array1, Array2};
+use numpy::ndarray::{ArrayView1, ArrayView2};
 
 fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
     let (target, remain) = bytes.split_at(to_nbytes::<i64>(1));
     let value = i64::from_be_bytes(target.try_into().unwrap());
     (remain, value as usize)
 }
-fn extract_vec<T: Sized>(bytes: &[u8], nbytes: usize) -> (&[u8], Vec<T>) {
+fn extract_vec<T: Sized>(bytes: &[u8], nbytes: usize) -> (&[u8], *const T) {
     let (target, remain) = bytes.split_at(nbytes);
-    let results = unsafe {
-        let vec_u8 = Vec::from_raw_parts(target.as_ptr() as *mut u8, nbytes, nbytes);
-        from_bytes(vec_u8)
-    };
-    (remain, results)
+    (remain, target.as_ptr() as *const u8 as *const T)
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -61,15 +57,15 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let index_shape = index_nbytes / 8;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
-        let (bytes, index_vec) = extract_vec::<IndexDtype>(bytes, index_nbytes);
-        let index_array = Array1::<IndexDtype>::from_shape_vec((index_shape,), index_vec).unwrap();
-        let (bytes, columns_vec) = extract_vec::<ColumnsDtype>(bytes, columns_nbytes);
+        let (bytes, index_ptr) = extract_vec::<IndexDtype>(bytes, index_nbytes);
+        let index_array = ArrayView1::<IndexDtype>::from_shape_ptr((index_shape,), index_ptr);
+        let (bytes, columns_ptr) = extract_vec::<ColumnsDtype>(bytes, columns_nbytes);
         let columns_array =
-            Array1::<ColumnsDtype>::from_shape_vec((columns_shape,), columns_vec).unwrap();
+            ArrayView1::<ColumnsDtype>::from_shape_ptr((columns_shape,), columns_ptr);
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
-        let (_, values_vec) = extract_vec::<T>(bytes, values_nbytes);
+        let (_, values_ptr) = extract_vec::<T>(bytes, values_nbytes);
         let values_array =
-            Array2::<T>::from_shape_vec((index_shape, columns_shape), values_vec).unwrap();
+            ArrayView2::<T>::from_shape_ptr((index_shape, columns_shape), values_ptr);
 
         DataFrame::new(
             index_array.into(),
