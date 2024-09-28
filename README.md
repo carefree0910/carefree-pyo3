@@ -17,3 +17,9 @@ pip install carefree-pyo3
 ```bash
 pytest
 ```
+
+## Benchmark (Rust)
+
+```bash
+cargo bench -F criterion -p cfpyo3_rs_core -- --verbose
+```
