@@ -342,4 +342,17 @@ mod tests {
     fn test_corr_axis1_f64() {
         test_corr_axis1!(f64);
     }
+
+    #[test]
+    fn test_searchsorted() {
+        let array = ArrayView1::<i64>::from_shape(5, &[1, 2, 3, 5, 6]).unwrap();
+        assert_eq!(searchsorted(&array, &0), 0);
+        assert_eq!(searchsorted(&array, &1), 0);
+        assert_eq!(searchsorted(&array, &3), 2);
+        assert_eq!(searchsorted(&array, &4), 3);
+        assert_eq!(searchsorted(&array, &5), 3);
+        assert_eq!(searchsorted(&array, &6), 4);
+        assert_eq!(searchsorted(&array, &7), 5);
+        assert_eq!(batch_searchsorted(&array, &array), vec![0, 1, 2, 3, 4]);
+    }
 }
