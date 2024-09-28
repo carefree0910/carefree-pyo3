@@ -53,7 +53,7 @@ macro_rules! bench_corr_axis1_full {
     };
 }
 
-pub fn bench_mean_axis1(c: &mut Criterion) {
+pub fn bench_axis1_ops(c: &mut Criterion) {
     bench_mean_axis1_full!(c, 1);
     bench_mean_axis1_full!(c, 2);
     bench_mean_axis1_full!(c, 4);
@@ -64,5 +64,5 @@ pub fn bench_mean_axis1(c: &mut Criterion) {
     bench_corr_axis1_full!(c, 8);
 }
 
-criterion_group!(benches, bench_mean_axis1);
+criterion_group!(benches, bench_axis1_ops);
 criterion_main!(benches);
