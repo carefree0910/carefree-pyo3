@@ -181,6 +181,7 @@ dependencies = [
  "num-traits",
  "numpy",
  "opendal",
+ "rand",
  "rayon",
  "redis",
  "tokio",
