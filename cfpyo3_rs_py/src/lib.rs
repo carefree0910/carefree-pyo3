@@ -26,9 +26,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit");
 
     df_module.add("COLUMNS_NBYTES", cfpyo3_core::df::COLUMNS_NBYTES)?;
-
-    let frame_module = register_submodule!(df_module, "cfpyo3._rs.df.frame");
-    frame_module.add_class::<df::frame::DataFrameF64>()?;
+    df_module.add_class::<df::DataFrameF64>()?;
 
     let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc");
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
