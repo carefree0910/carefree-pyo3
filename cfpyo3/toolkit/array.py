@@ -32,12 +32,27 @@ def _dispatch(
     raise ValueError(f"`{name}` only supports `f32` & `f64`, '{pivot.dtype}' found")
 
 
-def mean_axis1(array: "np.ndarray") -> "np.ndarray":
-    return _dispatch("mean_axis1", mean_axis1_f32, mean_axis1_f64, array, array)
+def mean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+    return _dispatch(
+        "mean_axis1",
+        mean_axis1_f32,
+        mean_axis1_f64,
+        array,
+        array,
+        num_threads=num_threads,
+    )
 
 
-def corr_axis1(a: "np.ndarray", b: "np.ndarray") -> "np.ndarray":
-    return _dispatch("corr_axis1", corr_axis1_f32, corr_axis1_f64, a, a, b)
+def corr_axis1(a: "np.ndarray", b: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+    return _dispatch(
+        "corr_axis1",
+        corr_axis1_f32,
+        corr_axis1_f64,
+        a,
+        a,
+        b,
+        num_threads=num_threads,
+    )
 
 
 def fast_concat_2d_axis0(arrays: List["np.ndarray"]) -> "np.ndarray":
