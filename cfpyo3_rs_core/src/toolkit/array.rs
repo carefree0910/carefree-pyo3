@@ -250,6 +250,20 @@ pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: 
     res
 }
 
+pub fn searchsorted<T: Ord>(arr: &ArrayView1<T>, value: &T) -> usize {
+    arr.as_slice()
+        .unwrap()
+        .binary_search(value)
+        .unwrap_or_else(|x| x)
+}
+
+pub fn batch_searchsorted<T: Ord>(arr: &ArrayView1<T>, values: &ArrayView1<T>) -> Vec<usize> {
+    values
+        .iter()
+        .map(|value| searchsorted(arr, value))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
