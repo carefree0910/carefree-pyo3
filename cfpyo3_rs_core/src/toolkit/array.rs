@@ -211,30 +211,42 @@ fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
 pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build()
-        .unwrap();
-    pool.scope(|s| {
+    if num_threads <= 1 {
         enumerate(a.rows()).for_each(|(i, row)| {
-            s.spawn(move |_| slice.set(i, mean(row)));
+            slice.set(i, mean(row));
         });
-    });
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+        pool.scope(|s| {
+            enumerate(a.rows()).for_each(|(i, row)| {
+                s.spawn(move |_| slice.set(i, mean(row)));
+            });
+        });
+    }
     res
 }
 
 pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build()
-        .unwrap();
-    pool.scope(move |s| {
+    if num_threads <= 1 {
         zip(a.rows(), b.rows()).enumerate().for_each(|(i, (a, b))| {
-            s.spawn(move |_| slice.set(i, corr(a, b)));
+            slice.set(i, corr(a, b));
         });
-    });
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+        pool.scope(move |s| {
+            zip(a.rows(), b.rows()).enumerate().for_each(|(i, (a, b))| {
+                s.spawn(move |_| slice.set(i, corr(a, b)));
+            });
+        });
+    }
     res
 }
 
@@ -274,6 +286,8 @@ mod tests {
                 ArrayView2::<$dtype>::from_shape((2, 3), &[1., 2., 3., 4., 5., 6.]).unwrap();
             let out = mean_axis1(&array, 1);
             assert_allclose(out.as_slice(), &[2., 5.]);
+            let out = mean_axis1(&array, 2);
+            assert_allclose(out.as_slice(), &[2., 5.]);
         };
     }
 
@@ -282,6 +296,8 @@ mod tests {
             let array =
                 ArrayView2::<$dtype>::from_shape((2, 3), &[1., 2., 3., 4., 5., 6.]).unwrap();
             let out = corr_axis1(&array, &(&array + 1.).view(), 1);
+            assert_allclose(out.as_slice(), &[1., 1.]);
+            let out = corr_axis1(&array, &(&array + 1.).view(), 2);
             assert_allclose(out.as_slice(), &[1., 1.]);
         };
     }
