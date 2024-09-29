@@ -122,7 +122,7 @@ impl DataFrameF64 {
 
 #[pymethods]
 impl ArcDataFrameF64 {
-    pub(crate) fn to_py(&self, py: Python) -> DataFrameF64 {
+    fn to_py(&self, py: Python) -> DataFrameF64 {
         DataFrameF64 {
             index: self.index.to_pyarray_bound(py).unbind(),
             columns: self.columns.to_pyarray_bound(py).unbind(),
