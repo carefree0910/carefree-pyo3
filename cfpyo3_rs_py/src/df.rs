@@ -18,7 +18,7 @@
 //! one single purpose: to load data from an external source (e.g., fs, internet, etc.) and then perform
 //! calculations directly in Rust. There should be no data interactions with Python in this workflow.
 //!
-//! > Supported operations of [`ArcDataFrameF64`] are limited to the [`meta::IOs`] and [`meta::Ops`] traits.
+//! > Supported operations of [`ArcDataFrameF64`] are limited to the [`io::IOs`] + [`ops::Ops`] trait.
 //!
 //! With this design, it is useful in some performance-critical scenarios. To list a few:
 //! - Read from a lot of files, do calculations, and write the results back to some other files.

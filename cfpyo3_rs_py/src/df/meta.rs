@@ -2,46 +2,73 @@ use super::{ArcDataFrameF64, DataFrameF64};
 use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
-    PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray,
+    PyArray1, PyArray2, PyArrayMethods, ToPyArray,
 };
 use pyo3::prelude::*;
 
-pub(super) trait IOs {
-    fn save(&self, py: Python, path: &str) -> PyResult<()>;
-    fn load(py: Python, path: &str) -> PyResult<Self>
+pub(super) trait WithCore {
+    fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64>;
+    fn from_core(py: Python, df: DataFrame<f64>) -> Self
     where
         Self: Sized;
 }
-pub(super) trait Ops {
-    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>>;
-    fn corr_with_axis1<'py>(
-        &'py self,
-        py: Python<'py>,
-        other: PyReadonlyArray2<f64>,
-    ) -> Bound<'py, PyArray1<f64>>;
-}
 
 impl DataFrameF64 {
-    pub(crate) fn get_index_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, IndexDtype> {
+    pub(crate) fn get_index_array<'py>(&'py self, py: Python<'py>) -> ArrayView1<'py, IndexDtype> {
         unsafe { self.index.bind(py).as_array() }
     }
-    pub(crate) fn get_columns_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, ColumnsDtype> {
+    pub(crate) fn get_columns_array<'py>(
+        &'py self,
+        py: Python<'py>,
+    ) -> ArrayView1<'py, ColumnsDtype> {
         unsafe { self.columns.bind(py).as_array() }
     }
-    pub(crate) fn get_values_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
+    pub(crate) fn get_values_array<'py>(&'py self, py: Python<'py>) -> ArrayView2<'py, f64> {
         unsafe { self.values.bind(py).as_array() }
     }
-    pub(crate) fn to_core<'a>(&'a self, py: Python<'a>) -> DataFrame<'a, f64> {
+}
+
+impl WithCore for DataFrameF64 {
+    fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64> {
         let index = self.get_index_array(py);
         let columns = self.get_columns_array(py);
         let values = self.get_values_array(py);
         DataFrame::new(index.into(), columns.into(), values.into())
     }
-    pub(crate) fn from_core(py: Python, df: DataFrame<f64>) -> Self {
+    fn from_core(py: Python, df: DataFrame<f64>) -> Self {
         DataFrameF64 {
             index: df.index.to_pyarray_bound(py).unbind(),
             columns: df.columns.to_pyarray_bound(py).unbind(),
             values: df.values.to_pyarray_bound(py).unbind(),
+        }
+    }
+}
+
+impl WithCore for ArcDataFrameF64 {
+    fn to_core(&self, _: Python) -> DataFrame<f64> {
+        DataFrame::new(
+            self.index.view().into(),
+            self.columns.view().into(),
+            self.values.view().into(),
+        )
+    }
+    fn from_core(_: Python, df: DataFrame<f64>) -> Self {
+        ArcDataFrameF64 {
+            index: df
+                .index
+                .try_into_owned_nocopy()
+                .unwrap_or_else(|_| panic!("index is not owned"))
+                .into(),
+            columns: df
+                .columns
+                .try_into_owned_nocopy()
+                .unwrap_or_else(|_| panic!("columns is not owned"))
+                .into(),
+            values: df
+                .values
+                .try_into_owned_nocopy()
+                .unwrap_or_else(|_| panic!("values is not owned"))
+                .into(),
         }
     }
 }
@@ -89,35 +116,6 @@ impl DataFrameF64 {
             index: self.index.clone_ref(py),
             columns: self.columns.clone_ref(py),
             values,
-        }
-    }
-}
-
-impl ArcDataFrameF64 {
-    pub(crate) fn to_core(&self) -> DataFrame<f64> {
-        DataFrame::new(
-            self.index.view().into(),
-            self.columns.view().into(),
-            self.values.view().into(),
-        )
-    }
-    pub(crate) fn from_core(df: DataFrame<f64>) -> Self {
-        ArcDataFrameF64 {
-            index: df
-                .index
-                .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("index is not owned"))
-                .into(),
-            columns: df
-                .columns
-                .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("columns is not owned"))
-                .into(),
-            values: df
-                .values
-                .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("values is not owned"))
-                .into(),
         }
     }
 }
