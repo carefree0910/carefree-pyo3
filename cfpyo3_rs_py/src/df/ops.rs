@@ -19,33 +19,25 @@ pub(super) trait Ops: WithCore {
     }
 }
 
-// bindings
+macro_rules! ops_bindings_impl {
+    ($type:ty) => {
+        impl Ops for $type {}
 
-impl Ops for DataFrameF64 {}
-impl Ops for ArcDataFrameF64 {}
-#[pymethods]
-impl DataFrameF64 {
-    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        Ops::mean_axis1(self, py)
-    }
-    fn corr_with_axis1<'py>(
-        &'py self,
-        py: Python<'py>,
-        other: PyReadonlyArray2<f64>,
-    ) -> Bound<'py, PyArray1<f64>> {
-        Ops::corr_with_axis1(self, py, other)
-    }
+        #[pymethods]
+        impl $type {
+            fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+                Ops::mean_axis1(self, py)
+            }
+            fn corr_with_axis1<'py>(
+                &'py self,
+                py: Python<'py>,
+                other: PyReadonlyArray2<f64>,
+            ) -> Bound<'py, PyArray1<f64>> {
+                Ops::corr_with_axis1(self, py, other)
+            }
+        }
+    };
 }
-#[pymethods]
-impl ArcDataFrameF64 {
-    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        Ops::mean_axis1(self, py)
-    }
-    fn corr_with_axis1<'py>(
-        &'py self,
-        py: Python<'py>,
-        other: PyReadonlyArray2<f64>,
-    ) -> Bound<'py, PyArray1<f64>> {
-        Ops::corr_with_axis1(self, py, other)
-    }
-}
+
+ops_bindings_impl!(DataFrameF64);
+ops_bindings_impl!(ArcDataFrameF64);

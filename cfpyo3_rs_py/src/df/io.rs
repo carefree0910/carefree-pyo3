@@ -20,27 +20,22 @@ pub(super) trait IOs: WithCore {
     }
 }
 
-// bindings
+macro_rules! ios_bindings_impl {
+    ($type:ty) => {
+        impl IOs for $type {}
 
-impl IOs for DataFrameF64 {}
-impl IOs for ArcDataFrameF64 {}
-#[pymethods]
-impl DataFrameF64 {
-    fn save(&self, py: Python, path: &str) -> PyResult<()> {
-        IOs::save(self, py, path)
-    }
-    #[staticmethod]
-    fn load(py: Python, path: &str) -> PyResult<Self> {
-        IOs::load(py, path)
-    }
+        #[pymethods]
+        impl $type {
+            fn save(&self, py: Python, path: &str) -> PyResult<()> {
+                IOs::save(self, py, path)
+            }
+            #[staticmethod]
+            fn load(py: Python, path: &str) -> PyResult<Self> {
+                IOs::load(py, path)
+            }
+        }
+    };
 }
-#[pymethods]
-impl ArcDataFrameF64 {
-    fn save(&self, py: Python, path: &str) -> PyResult<()> {
-        IOs::save(self, py, path)
-    }
-    #[staticmethod]
-    fn load(py: Python, path: &str) -> PyResult<Self> {
-        IOs::load(py, path)
-    }
-}
+
+ios_bindings_impl!(DataFrameF64);
+ios_bindings_impl!(ArcDataFrameF64);
