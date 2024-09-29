@@ -2,8 +2,10 @@ import numpy as np
 import pandas as pd
 
 from functools import lru_cache
+
 from cfpyo3.df import DataFrame
-from cfpyo3._rs.df import COLUMNS_NBYTES
+from cfpyo3.df.utils import to_index
+from cfpyo3.df.utils import to_columns
 
 
 NUM_ROWS = 239
@@ -13,8 +15,8 @@ NUM_COLUMNS = 5000
 def np_to_df(values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(
         values,
-        index=np.arange(0, NUM_ROWS, dtype="datetime64[ns]"),
-        columns=np.arange(NUM_COLUMNS).astype(f"S{COLUMNS_NBYTES}"),
+        index=to_index(np.arange(0, NUM_ROWS)),
+        columns=to_columns(np.arange(NUM_COLUMNS)),
     )
 
 
