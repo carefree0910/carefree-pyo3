@@ -111,6 +111,19 @@ jobs:
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
       - run: cargo test --workspace --exclude cfpyo3_rs_py -F ${{ matrix.features }} --verbose
 
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: [test-py, test-rs]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniconda-version: "latest"
+          activate-environment: test
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: rustup update stable && rustup default stable
+      - run: cargo bench -F criterion -p cfpyo3_rs_core -- --verbose
+
   build-wheels:
     needs: [test-py, test-rs]
     runs-on: ${{ matrix.os }}
