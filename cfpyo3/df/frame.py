@@ -1,6 +1,7 @@
 from typing import Tuple
 from typing import Union
 from typing import TYPE_CHECKING
+
 from cfpyo3._rs.df import COLUMNS_NBYTES
 from cfpyo3._rs.df import DataFrameF64
 

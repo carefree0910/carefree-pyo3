@@ -3,6 +3,7 @@ from typing import List
 from typing import Callable
 from typing import Optional
 from typing import TYPE_CHECKING
+
 from cfpyo3._rs.toolkit.array import mean_axis1_f32
 from cfpyo3._rs.toolkit.array import mean_axis1_f64
 from cfpyo3._rs.toolkit.array import corr_axis1_f32
