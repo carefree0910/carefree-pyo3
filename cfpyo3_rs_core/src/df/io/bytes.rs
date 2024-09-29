@@ -109,7 +109,7 @@ pub(super) mod tests {
         let values_vec = unsafe { from_vec(values_vec) };
         let values_vec = values_vec[..1].to_vec();
 
-        DataFrame::<f32>::from_owned(index_vec, columns_vec, values_vec)
+        DataFrame::<f32>::from_owned(index_vec, columns_vec, values_vec).unwrap()
     }
 
     #[test]

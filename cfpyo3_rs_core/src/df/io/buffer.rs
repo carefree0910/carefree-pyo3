@@ -4,6 +4,7 @@ use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
 use crate::toolkit::convert::{from_bytes, to_nbytes};
 use bytes::Buf;
+use numpy::ndarray::ShapeError;
 
 fn extract_bytes<T: Sized>(buf: &mut impl Buf, nbytes: usize) -> Vec<T> {
     // `advance` will happen inside `copy_to_bytes`
@@ -29,7 +30,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     /// The safety concerns come from whether:
     /// - the bytes behind the `buf` is of the desired memory layout.
     /// - the `buf` can be fully consumed after loading.
-    pub unsafe fn from_buffer(mut buf: impl Buf) -> Self {
+    pub unsafe fn from_buffer(mut buf: impl Buf) -> Result<Self, ShapeError> {
         let index_nbytes = buf.get_i64_le() as usize;
         let columns_nbytes = buf.get_i64_le() as usize;
 
@@ -59,7 +60,7 @@ mod tests {
     fn test_buffer_io() {
         let df = get_test_df();
         let bytes = df.to_bytes();
-        let loaded = unsafe { DataFrame::<f32>::from_buffer(bytes.as_slice()) };
+        let loaded = DataFrame::<f32>::from_buffer(bytes.as_slice()).unwrap();
         assert_eq!(df.index, loaded.index);
         assert_eq!(df.columns, loaded.columns);
         assert_eq!(df.values, loaded.values);

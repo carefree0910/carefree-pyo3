@@ -4,7 +4,7 @@ use crate::{
     toolkit::array::AFloat,
 };
 use numpy::{
-    ndarray::{Array1, Array2, ArrayView1, ArrayView2, CowArray},
+    ndarray::{Array1, Array2, ArrayView1, ArrayView2, CowArray, ShapeError},
     Ix1, Ix2,
 };
 
@@ -47,20 +47,18 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         Self::new(index.into(), columns.into(), values.into())
     }
 
-    pub fn from_owned(index: Vec<IndexDtype>, columns: Vec<ColumnsDtype>, values: Vec<T>) -> Self {
+    pub fn from_owned(
+        index: Vec<IndexDtype>,
+        columns: Vec<ColumnsDtype>,
+        values: Vec<T>,
+    ) -> Result<Self, ShapeError> {
         let index_shape = index.len();
         let columns_shape = columns.len();
-        Self::new(
-            Array1::from_shape_vec((index_shape,), index)
-                .unwrap()
-                .into(),
-            Array1::from_shape_vec((columns_shape,), columns)
-                .unwrap()
-                .into(),
-            Array2::from_shape_vec((index_shape, columns_shape), values)
-                .unwrap()
-                .into(),
-        )
+        Ok(Self::new(
+            Array1::from_shape_vec((index_shape,), index)?.into(),
+            Array1::from_shape_vec((columns_shape,), columns)?.into(),
+            Array2::from_shape_vec((index_shape, columns_shape), values)?.into(),
+        ))
     }
 
     pub fn to_owned(self) -> Self {
