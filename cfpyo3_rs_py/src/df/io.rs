@@ -1,4 +1,4 @@
-use super::{meta::WithCore, ArcDataFrameF64, DataFrameF64};
+use super::{meta::WithCore, DataFrameF64, OwnedDataFrameF64};
 use cfpyo3_core::df::DataFrame;
 use pyo3::prelude::*;
 
@@ -38,4 +38,4 @@ macro_rules! ios_bindings_impl {
 }
 
 ios_bindings_impl!(DataFrameF64);
-ios_bindings_impl!(ArcDataFrameF64);
+ios_bindings_impl!(OwnedDataFrameF64);

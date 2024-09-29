@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 
 from cfpyo3._rs.df import COLUMNS_NBYTES
 from cfpyo3._rs.df import DataFrameF64
-from cfpyo3._rs.df import ArcDataFrameF64
+from cfpyo3._rs.df import OwnedDataFrameF64
 
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
-TDF = Union[DataFrameF64, ArcDataFrameF64]
+TDF = Union[DataFrameF64, OwnedDataFrameF64]
 RHS = Union["np.ndarray", "pd.DataFrame", "DataFrame"]
 
 
@@ -41,7 +41,7 @@ class DataFrame:
 
     @property
     def py_df(self) -> "DataFrameF64":
-        if isinstance(self._df, ArcDataFrameF64):
+        if isinstance(self._df, OwnedDataFrameF64):
             self._df = self._df.to_py()
         return self._df
 
@@ -87,7 +87,7 @@ class DataFrame:
 
     @staticmethod
     def load(path: PathLike) -> "DataFrame":
-        return DataFrame(ArcDataFrameF64.load(str(path)))
+        return DataFrame(OwnedDataFrameF64.load(str(path)))
 
 
 __all__ = [

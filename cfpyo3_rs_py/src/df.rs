@@ -2,7 +2,7 @@
 //!
 //! # Design
 //!
-//! This module defines two classes: [`DataFrameF64`] and [`ArcDataFrameF64`] for different purposes.
+//! This module defines two classes: [`DataFrameF64`] and [`OwnedDataFrameF64`] for different purposes.
 //!
 //! ## [`DataFrameF64`]
 //!
@@ -12,13 +12,13 @@
 //! It however will suffer a little bit when performing calculations in Rust, because it requires GIL
 //! to get the data from Python.
 //!
-//! ## [`ArcDataFrameF64`]
+//! ## [`OwnedDataFrameF64`]
 //!
-//! This is a pure Rust class that uses [`ArcArray`]s to store the data. It is designed for almost only
+//! This is a pure Rust class that uses [`Array`]s to store the data. It is designed for almost only
 //! one single purpose: to load data from an external source (e.g., fs, internet, etc.) and then perform
 //! calculations directly in Rust. There should be no data interactions with Python in this workflow.
 //!
-//! > Supported operations of [`ArcDataFrameF64`] are limited to the [`io::IOs`] + [`ops::Ops`] trait.
+//! > Supported operations of [`OwnedDataFrameF64`] are limited to the [`io::IOs`] + [`ops::Ops`] trait.
 //!
 //! With this design, it is useful in some performance-critical scenarios. To list a few:
 //! - Read from a lot of files, do calculations, and write the results back to some other files.
@@ -29,7 +29,7 @@
 
 use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
 use numpy::{
-    ndarray::{ArcArray1, ArcArray2},
+    ndarray::{Array1, Array2},
     PyArray1, PyArray2,
 };
 use pyo3::prelude::*;
@@ -46,8 +46,8 @@ pub struct DataFrameF64 {
 }
 
 #[pyclass]
-pub struct ArcDataFrameF64 {
-    pub index: ArcArray1<IndexDtype>,
-    pub columns: ArcArray1<ColumnsDtype>,
-    pub values: ArcArray2<f64>,
+pub struct OwnedDataFrameF64 {
+    pub index: Array1<IndexDtype>,
+    pub columns: Array1<ColumnsDtype>,
+    pub values: Array2<f64>,
 }

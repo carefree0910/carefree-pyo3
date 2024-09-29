@@ -1,4 +1,4 @@
-use super::{ArcDataFrameF64, DataFrameF64};
+use super::{DataFrameF64, OwnedDataFrameF64};
 use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
@@ -44,7 +44,7 @@ impl WithCore for DataFrameF64 {
     }
 }
 
-impl WithCore for ArcDataFrameF64 {
+impl WithCore for OwnedDataFrameF64 {
     fn to_core(&self, _: Python) -> DataFrame<f64> {
         DataFrame::new(
             self.index.view().into(),
@@ -53,22 +53,19 @@ impl WithCore for ArcDataFrameF64 {
         )
     }
     fn from_core(_: Python, df: DataFrame<f64>) -> Self {
-        ArcDataFrameF64 {
+        OwnedDataFrameF64 {
             index: df
                 .index
                 .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("index is not owned"))
-                .into(),
+                .unwrap_or_else(|_| panic!("index is not owned")),
             columns: df
                 .columns
                 .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("columns is not owned"))
-                .into(),
+                .unwrap_or_else(|_| panic!("columns is not owned")),
             values: df
                 .values
                 .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("values is not owned"))
-                .into(),
+                .unwrap_or_else(|_| panic!("values is not owned")),
         }
     }
 }
@@ -121,7 +118,7 @@ impl DataFrameF64 {
 }
 
 #[pymethods]
-impl ArcDataFrameF64 {
+impl OwnedDataFrameF64 {
     fn to_py(&self, py: Python) -> DataFrameF64 {
         DataFrameF64 {
             index: self.index.to_pyarray_bound(py).unbind(),

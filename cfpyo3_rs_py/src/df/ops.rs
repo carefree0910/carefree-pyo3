@@ -1,4 +1,4 @@
-use super::{meta::WithCore, ArcDataFrameF64, DataFrameF64};
+use super::{meta::WithCore, DataFrameF64, OwnedDataFrameF64};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
@@ -40,4 +40,4 @@ macro_rules! ops_bindings_impl {
 }
 
 ops_bindings_impl!(DataFrameF64);
-ops_bindings_impl!(ArcDataFrameF64);
+ops_bindings_impl!(OwnedDataFrameF64);
