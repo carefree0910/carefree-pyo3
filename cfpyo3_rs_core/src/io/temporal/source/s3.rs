@@ -1,9 +1,7 @@
 use super::Source;
 use crate::df::DataFrame;
 use crate::toolkit::array::AFloat;
-use opendal::services::S3;
-use opendal::Operator;
-use opendal::Result;
+use opendal::{services::S3, Error, Operator, Result};
 use std::marker::PhantomData;
 
 // core implementations
@@ -16,8 +14,8 @@ struct S3Client<T: AFloat> {
 impl<T: AFloat> S3Client<T> {
     pub async fn read(&self, key: &str) -> Result<DataFrame<T>> {
         let rv = self.op.read(key).await?;
-        let df = unsafe { DataFrame::from_buffer(rv) };
-        Ok(df)
+        DataFrame::from_buffer(rv)
+            .map_err(|e| Error::new(opendal::ErrorKind::Unexpected, e.to_string()))
     }
 
     pub async fn write(&self, key: &str, df: &DataFrame<'_, T>) -> Result<()> {

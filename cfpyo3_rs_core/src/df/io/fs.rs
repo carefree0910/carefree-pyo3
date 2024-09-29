@@ -22,7 +22,8 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         // internally, so we only need to new an empty Vec.
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
-        Ok(unsafe { DataFrame::from_buffer(bytes.as_slice()) })
+        DataFrame::from_buffer(bytes.as_slice())
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
 

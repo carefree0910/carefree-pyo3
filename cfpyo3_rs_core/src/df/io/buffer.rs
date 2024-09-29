@@ -25,12 +25,12 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     ///
     /// If you want a zero-copy loading, you can try to use the [`DataFrame::from_bytes`] method with your [`Buf`].
     ///
-    /// # Safety
+    /// # Panics
     ///
-    /// The safety concerns come from whether:
-    /// - the bytes behind the `buf` is of the desired memory layout.
-    /// - the `buf` can be fully consumed after loading.
-    pub unsafe fn from_buffer(mut buf: impl Buf) -> Result<Self, ShapeError> {
+    /// This method will panic if:
+    /// - the bytes behind the `buf` is not of the desired memory layout.
+    /// - the `buf` is not fully consumed after loading.
+    pub fn from_buffer(mut buf: impl Buf) -> Result<Self, ShapeError> {
         let index_nbytes = buf.get_i64_le() as usize;
         let columns_nbytes = buf.get_i64_le() as usize;
 
