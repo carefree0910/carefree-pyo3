@@ -2,9 +2,9 @@ import time
 import random
 import hashlib
 
+from cfpyo3.toolkit.misc import hash_code as hash_code_rs
 from cfpyo3.toolkit.misc import hash_dict
 from cfpyo3.toolkit.misc import hash_str_dict
-from cfpyo3._rs.toolkit.misc import hash_code as hash_code_rs
 
 
 def hash_code(code: str) -> str:

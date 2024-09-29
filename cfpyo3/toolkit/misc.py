@@ -4,11 +4,15 @@ from typing import List
 from typing import Optional
 from typing import Protocol
 
-from cfpyo3._rs.toolkit.misc import hash_code
+from cfpyo3._rs.toolkit.misc import hash_code as hash_code_rs
 
 
 class IHasher(Protocol):
     def __call__(self, code: str) -> str: ...
+
+
+def hash_code(code: str) -> str:
+    return hash_code_rs(code)
 
 
 def hash_dict(
@@ -39,7 +43,7 @@ def hash_dict(
                 hashes.append(hash_fn(str(v)))
         return hash_fn("".join(hashes))
 
-    hash_fn = hasher or hash_code
+    hash_fn = hasher or hash_code_rs
     return _hash(d)
 
 
@@ -53,7 +57,7 @@ def hash_str_dict(
     """a specific fast path for `hash_dict` when all keys & values are strings."""
 
     if hasher is None:
-        hasher = hash_code
+        hasher = hash_code_rs
     if key_order is None:
         key_order = sorted(d)
     if static_keys:
@@ -62,6 +66,7 @@ def hash_str_dict(
 
 
 __all__ = [
+    "hash_code",
     "hash_dict",
     "hash_str_dict",
 ]
