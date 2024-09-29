@@ -1,4 +1,4 @@
-use super::DataFrameF64;
+use super::{ArcDataFrameF64, DataFrameF64};
 use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
@@ -74,6 +74,46 @@ impl DataFrameF64 {
             index: self.index.clone_ref(py),
             columns: self.columns.clone_ref(py),
             values,
+        }
+    }
+}
+
+impl ArcDataFrameF64 {
+    pub(crate) fn to_core(&self) -> DataFrame<f64> {
+        DataFrame::new(
+            self.index.view().into(),
+            self.columns.view().into(),
+            self.values.view().into(),
+        )
+    }
+    pub(crate) fn from_core(df: DataFrame<f64>) -> Self {
+        ArcDataFrameF64 {
+            index: df
+                .index
+                .try_into_owned_nocopy()
+                .unwrap_or_else(|_| panic!("index is not owned"))
+                .into(),
+            columns: df
+                .columns
+                .try_into_owned_nocopy()
+                .unwrap_or_else(|_| panic!("columns is not owned"))
+                .into(),
+            values: df
+                .values
+                .try_into_owned_nocopy()
+                .unwrap_or_else(|_| panic!("values is not owned"))
+                .into(),
+        }
+    }
+}
+
+#[pymethods]
+impl ArcDataFrameF64 {
+    pub(crate) fn to_py(&self, py: Python) -> DataFrameF64 {
+        DataFrameF64 {
+            index: self.index.to_pyarray_bound(py).unbind(),
+            columns: self.columns.to_pyarray_bound(py).unbind(),
+            values: self.values.to_pyarray_bound(py).unbind(),
         }
     }
 }

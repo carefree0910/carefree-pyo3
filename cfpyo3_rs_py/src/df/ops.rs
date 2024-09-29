@@ -1,21 +1,66 @@
-use super::DataFrameF64;
+use super::{ArcDataFrameF64, DataFrameF64, Ops};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
-#[pymethods]
-impl DataFrameF64 {
-    fn mean_axis1<'a>(&'a self, py: Python<'a>) -> Bound<'a, PyArray1<f64>> {
+impl Ops for DataFrameF64 {
+    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.to_core(py).mean_axis1(8).into_pyarray_bound(py)
     }
 
-    fn corr_with_axis1<'a>(
-        &'a self,
-        py: Python<'a>,
+    fn corr_with_axis1<'py>(
+        &'py self,
+        py: Python<'py>,
         other: PyReadonlyArray2<f64>,
-    ) -> Bound<'a, PyArray1<f64>> {
+    ) -> Bound<'py, PyArray1<f64>> {
         let other = other.as_array();
         self.to_core(py)
             .corr_with_axis1(other, 8)
             .into_pyarray_bound(py)
+    }
+}
+
+impl Ops for ArcDataFrameF64 {
+    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        self.to_core().mean_axis1(8).into_pyarray_bound(py)
+    }
+
+    fn corr_with_axis1<'py>(
+        &'py self,
+        py: Python<'py>,
+        other: PyReadonlyArray2<f64>,
+    ) -> Bound<'py, PyArray1<f64>> {
+        let other = other.as_array();
+        self.to_core()
+            .corr_with_axis1(other, 8)
+            .into_pyarray_bound(py)
+    }
+}
+
+// bindings
+
+#[pymethods]
+impl DataFrameF64 {
+    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        Ops::mean_axis1(self, py)
+    }
+    fn corr_with_axis1<'py>(
+        &'py self,
+        py: Python<'py>,
+        other: PyReadonlyArray2<f64>,
+    ) -> Bound<'py, PyArray1<f64>> {
+        Ops::corr_with_axis1(self, py, other)
+    }
+}
+#[pymethods]
+impl ArcDataFrameF64 {
+    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        Ops::mean_axis1(self, py)
+    }
+    fn corr_with_axis1<'py>(
+        &'py self,
+        py: Python<'py>,
+        other: PyReadonlyArray2<f64>,
+    ) -> Bound<'py, PyArray1<f64>> {
+        Ops::corr_with_axis1(self, py, other)
     }
 }

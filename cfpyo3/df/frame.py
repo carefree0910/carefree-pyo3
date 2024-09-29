@@ -4,11 +4,13 @@ from typing import TYPE_CHECKING
 
 from cfpyo3._rs.df import COLUMNS_NBYTES
 from cfpyo3._rs.df import DataFrameF64
+from cfpyo3._rs.df import ArcDataFrameF64
 
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+TDF = Union[DataFrameF64, ArcDataFrameF64]
 RHS = Union["np.ndarray", "pd.DataFrame", "DataFrame"]
 
 
@@ -18,7 +20,7 @@ def rhs_to_np(rhs: RHS) -> "np.ndarray":
     if isinstance(rhs, pd.DataFrame):
         return rhs.values
     if isinstance(rhs, DataFrame):
-        return rhs._df.values
+        return rhs.py_df.values
     return rhs
 
 
@@ -30,25 +32,33 @@ class DataFrame:
     - values: f64
     """
 
-    def __init__(self, _df: DataFrameF64) -> None:
+    def __init__(self, _df: TDF) -> None:
         self._df = _df
 
     def __sub__(self, other: RHS) -> "DataFrame":
-        return DataFrame(self._df.with_data(self._df.values - rhs_to_np(other)))
+        return DataFrame(self.py_df.with_data(self.py_df.values - rhs_to_np(other)))
+
+    @property
+    def py_df(self) -> "DataFrameF64":
+        if isinstance(self._df, ArcDataFrameF64):
+            self._df = self._df.to_py()
+        return self._df
 
     @property
     def shape(self) -> Tuple[int, int]:
-        return self._df.shape
+        return self.py_df.shape
 
     def rows(self, indices: "np.ndarray") -> "DataFrame":
         import numpy as np
 
-        index = np.ascontiguousarray(self._df.index[indices])
-        values = np.ascontiguousarray(self._df.values[indices])
-        return DataFrame(DataFrameF64.new(index, self._df.columns, values))
+        df = self.py_df
+        index = np.ascontiguousarray(df.index[indices])
+        values = np.ascontiguousarray(df.values[indices])
+        return DataFrame(DataFrameF64.new(index, df.columns, values))
 
     def pow(self, exponent: float) -> "DataFrame":
-        return DataFrame(self._df.with_data(self._df.values**exponent))
+        df = self.py_df
+        return DataFrame(df.with_data(df.values**exponent))
 
     def mean_axis1(self) -> "np.ndarray":
         return self._df.mean_axis1()
@@ -59,12 +69,8 @@ class DataFrame:
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd
 
-        return pd.DataFrame(
-            self._df.values,
-            index=self._df.index,
-            columns=self._df.columns,
-            copy=False,
-        )
+        df = self.py_df
+        return pd.DataFrame(df.values, index=df.index, columns=df.columns, copy=False)
 
     @classmethod
     def from_pandas(cls, df: "pd.DataFrame") -> "DataFrame":
@@ -80,7 +86,7 @@ class DataFrame:
 
     @staticmethod
     def load(path: str) -> "DataFrame":
-        return DataFrame(DataFrameF64.load(path))
+        return DataFrame(ArcDataFrameF64.load(path))
 
 
 __all__ = [
