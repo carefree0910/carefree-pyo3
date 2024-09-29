@@ -7,13 +7,13 @@ use numpy::{
 use pyo3::prelude::*;
 
 impl DataFrameF64 {
-    pub fn get_index_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, IndexDtype> {
+    pub(crate) fn get_index_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, IndexDtype> {
         unsafe { self.index.bind(py).as_array() }
     }
-    pub fn get_columns_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, ColumnsDtype> {
+    pub(crate) fn get_columns_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, ColumnsDtype> {
         unsafe { self.columns.bind(py).as_array() }
     }
-    pub fn get_values_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
+    pub(crate) fn get_values_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
         unsafe { self.values.bind(py).as_array() }
     }
     pub(crate) fn to_core<'a>(&'a self, py: Python<'a>) -> DataFrame<'a, f64> {
