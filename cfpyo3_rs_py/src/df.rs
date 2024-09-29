@@ -18,7 +18,7 @@
 //! one single purpose: to load data from an external source (e.g., fs, internet, etc.) and then perform
 //! calculations directly in Rust. There should be no data interactions with Python in this workflow.
 //!
-//! > Supported operations of [`ArcDataFrameF64`] are limited to the [`IOs`] and [`Ops`] traits.
+//! > Supported operations of [`ArcDataFrameF64`] are limited to the [`meta::IOs`] and [`meta::Ops`] traits.
 //!
 //! With this design, it is useful in some performance-critical scenarios. To list a few:
 //! - Read from a lot of files, do calculations, and write the results back to some other files.
@@ -30,28 +30,13 @@
 use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
 use numpy::{
     ndarray::{ArcArray1, ArcArray2},
-    PyArray1, PyArray2, PyReadonlyArray2,
+    PyArray1, PyArray2,
 };
 use pyo3::prelude::*;
 
 mod io;
 mod meta;
 mod ops;
-
-trait IOs {
-    fn save(&self, py: Python, path: &str) -> PyResult<()>;
-    fn load(py: Python, path: &str) -> PyResult<Self>
-    where
-        Self: Sized;
-}
-trait Ops {
-    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>>;
-    fn corr_with_axis1<'py>(
-        &'py self,
-        py: Python<'py>,
-        other: PyReadonlyArray2<f64>,
-    ) -> Bound<'py, PyArray1<f64>>;
-}
 
 #[pyclass]
 pub struct DataFrameF64 {

@@ -2,9 +2,24 @@ use super::{ArcDataFrameF64, DataFrameF64};
 use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
-    PyArray1, PyArray2, PyArrayMethods, ToPyArray,
+    PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, ToPyArray,
 };
 use pyo3::prelude::*;
+
+pub(super) trait IOs {
+    fn save(&self, py: Python, path: &str) -> PyResult<()>;
+    fn load(py: Python, path: &str) -> PyResult<Self>
+    where
+        Self: Sized;
+}
+pub(super) trait Ops {
+    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>>;
+    fn corr_with_axis1<'py>(
+        &'py self,
+        py: Python<'py>,
+        other: PyReadonlyArray2<f64>,
+    ) -> Bound<'py, PyArray1<f64>>;
+}
 
 impl DataFrameF64 {
     pub(crate) fn get_index_array<'a>(&'a self, py: Python<'a>) -> ArrayView1<'a, IndexDtype> {

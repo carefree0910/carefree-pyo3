@@ -1,4 +1,4 @@
-use super::{ArcDataFrameF64, DataFrameF64, IOs};
+use super::{meta::IOs, ArcDataFrameF64, DataFrameF64};
 use cfpyo3_core::df::DataFrame;
 use pyo3::prelude::*;
 

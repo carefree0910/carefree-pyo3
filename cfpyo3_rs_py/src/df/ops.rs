@@ -1,4 +1,4 @@
-use super::{ArcDataFrameF64, DataFrameF64, Ops};
+use super::{meta::Ops, ArcDataFrameF64, DataFrameF64};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
