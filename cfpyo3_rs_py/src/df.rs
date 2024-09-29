@@ -2,6 +2,7 @@ use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
 
+mod io;
 mod meta;
 mod ops;
 

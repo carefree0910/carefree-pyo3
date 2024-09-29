@@ -75,6 +75,13 @@ class DataFrame:
         values = np.require(df.values, np.float64, "C")
         return DataFrame(DataFrameF64.new(index, columns, values))
 
+    def save(self, path: str) -> None:
+        self._df.save(path)
+
+    @staticmethod
+    def load(path: str) -> "DataFrame":
+        return DataFrame(DataFrameF64.load(path))
+
 
 __all__ = [
     "DataFrame",
