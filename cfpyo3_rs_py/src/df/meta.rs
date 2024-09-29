@@ -2,7 +2,7 @@ use super::DataFrameF64;
 use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
-    PyArray1, PyArray2, PyArrayMethods,
+    PyArray1, PyArray2, PyArrayMethods, ToPyArray,
 };
 use pyo3::prelude::*;
 
@@ -16,11 +16,18 @@ impl DataFrameF64 {
     pub fn get_values_array<'a>(&'a self, py: Python<'a>) -> ArrayView2<'a, f64> {
         unsafe { self.values.bind(py).as_array() }
     }
-    pub fn to_core<'a>(&'a self, py: Python<'a>) -> DataFrame<'a, f64> {
+    pub(crate) fn to_core<'a>(&'a self, py: Python<'a>) -> DataFrame<'a, f64> {
         let index = self.get_index_array(py);
         let columns = self.get_columns_array(py);
         let values = self.get_values_array(py);
         DataFrame::new(index.into(), columns.into(), values.into())
+    }
+    pub(crate) fn from_core(py: Python, df: DataFrame<f64>) -> Self {
+        DataFrameF64 {
+            index: df.index.to_pyarray_bound(py).unbind(),
+            columns: df.columns.to_pyarray_bound(py).unbind(),
+            values: df.values.to_pyarray_bound(py).unbind(),
+        }
     }
 }
 
