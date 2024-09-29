@@ -1,3 +1,4 @@
+from os import PathLike
 from typing import Tuple
 from typing import Union
 from typing import TYPE_CHECKING
@@ -81,12 +82,12 @@ class DataFrame:
         values = np.require(df.values, np.float64, "C")
         return DataFrame(DataFrameF64.new(index, columns, values))
 
-    def save(self, path: str) -> None:
-        self._df.save(path)
+    def save(self, path: PathLike) -> None:
+        self._df.save(str(path))
 
     @staticmethod
-    def load(path: str) -> "DataFrame":
-        return DataFrame(ArcDataFrameF64.load(path))
+    def load(path: PathLike) -> "DataFrame":
+        return DataFrame(ArcDataFrameF64.load(str(path)))
 
 
 __all__ = [
