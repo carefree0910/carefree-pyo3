@@ -1,6 +1,12 @@
-use crate::{df::DataFrame, toolkit::array::AFloat};
+use crate::{
+    df::{ColumnsDtype, DataFrame, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES},
+    toolkit::{
+        array::AFloat,
+        convert::{from_bytes, to_bytes, to_nbytes},
+    },
+};
 use std::{
-    fs::{self, File},
+    fs::File,
     io::{self, Read, Write},
 };
 
@@ -13,16 +19,44 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let mut file = File::open(path)?;
         DataFrame::load_from(&mut file)
     }
-    pub fn save_to(&self, file: &mut fs::File) -> io::Result<()> {
-        let bytes = self.to_bytes();
-        file.write_all(&bytes)
+    pub fn save_to(&self, file: &mut impl Write) -> io::Result<()> {
+        let index = &self.index;
+        let columns = &self.columns;
+        let index_nbytes = to_nbytes::<IndexDtype>(index.len()) as i64;
+        let columns_nbytes = to_nbytes::<ColumnsDtype>(columns.len()) as i64;
+        file.write_all(&index_nbytes.to_le_bytes())?;
+        file.write_all(&columns_nbytes.to_le_bytes())?;
+        unsafe {
+            file.write_all(to_bytes(index.as_slice().unwrap()))?;
+            file.write_all(to_bytes(columns.as_slice().unwrap()))?;
+            file.write_all(to_bytes(self.values.as_slice().unwrap()))?;
+        }
+        Ok(())
     }
-    pub fn load_from(file: &mut fs::File) -> io::Result<Self> {
-        // `read_to_end` will try to reserve appropriate capacity for the buffer
-        // internally, so we only need to new an empty Vec.
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)?;
-        DataFrame::from_buffer(bytes.as_slice())
+    pub fn load_from(file: &mut impl Read) -> io::Result<Self> {
+        let mut nbytes_buffer = [0u8; 8];
+        file.read_exact(&mut nbytes_buffer)?;
+        let index_nbytes = i64::from_le_bytes(nbytes_buffer) as usize;
+        file.read_exact(&mut nbytes_buffer)?;
+        let columns_nbytes = i64::from_le_bytes(nbytes_buffer) as usize;
+        let index_shape = index_nbytes / INDEX_NBYTES;
+        let columns_shape = columns_nbytes / COLUMNS_NBYTES;
+        let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
+        let mut index_buffer = vec![0u8; index_nbytes];
+        let mut columns_buffer = vec![0u8; columns_nbytes];
+        let mut values_buffer = vec![0u8; values_nbytes];
+        file.read_exact(&mut index_buffer)?;
+        file.read_exact(&mut columns_buffer)?;
+        file.read_exact(&mut values_buffer)?;
+
+        let (index, columns, values) = unsafe {
+            (
+                from_bytes(index_buffer),
+                from_bytes(columns_buffer),
+                from_bytes(values_buffer),
+            )
+        };
+        DataFrame::from_owned(index, columns, values)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
