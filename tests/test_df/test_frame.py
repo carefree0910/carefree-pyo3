@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from functools import lru_cache
 
 from cfpyo3.df import DataFrame
@@ -74,3 +76,38 @@ def test_corr():
         np.testing.assert_allclose(c0, c1)
         np.testing.assert_allclose(c0, c2)
         np.testing.assert_allclose(c0, c3)
+
+
+def save_df(df: pd.DataFrame, path: str) -> None:
+    df.to_pickle(path)
+
+
+def save_df_rs(df: DataFrame, path: str) -> None:
+    df.save(path)
+
+
+def load_df(path: str) -> pd.DataFrame:
+    return pd.read_pickle(path)
+
+
+def load_df_rs(path: str) -> DataFrame:
+    return DataFrame.load(path)
+
+
+def test_io():
+    for _ in range(3):
+        df = get_random_pandas_df()
+        df_rs = DataFrame.from_pandas(df)
+        assert df.equals(df_rs.to_pandas())
+        with TemporaryDirectory() as dir:
+            dir = Path(dir)
+            pd_f = dir / "test.pkl"
+            rs_f = dir / "test.cfdf"
+            save_df_rs(df_rs, rs_f)
+            df_rs_loaded = load_df_rs(rs_f)
+            save_df(df, pd_f)
+            df_loaded = load_df(pd_f)
+            assert df_loaded.equals(df_rs_loaded.to_pandas())
+            save_df_rs(df_rs_loaded, rs_f)
+            df_rs_loaded = load_df_rs(rs_f)
+            assert df_loaded.equals(df_rs_loaded.to_pandas())
