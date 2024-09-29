@@ -23,9 +23,9 @@ macro_rules! bench_mean_axis1_full {
         let array_f32 = &array_f32.view();
         let array_f64 = &array_f64.view();
         bench_mean_axis1!($c, $multiplier, 1, array_f32, array_f64);
-        // bench_mean_axis1!($c, $multiplier, 2, array_f32, array_f64);
-        // bench_mean_axis1!($c, $multiplier, 4, array_f32, array_f64);
-        // bench_mean_axis1!($c, $multiplier, 8, array_f32, array_f64);
+        bench_mean_axis1!($c, $multiplier, 2, array_f32, array_f64);
+        bench_mean_axis1!($c, $multiplier, 4, array_f32, array_f64);
+        bench_mean_axis1!($c, $multiplier, 8, array_f32, array_f64);
     };
 }
 macro_rules! bench_corr_axis1 {
