@@ -1,10 +1,7 @@
 use crate::{
     df::{
-        ColumnsDtype, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES,
-        {
-            meta::{align_nbytes, DF_ALIGN},
-            DataFrame,
-        },
+        meta::{align_nbytes, DF_ALIGN},
+        ColumnsDtype, DataFrame, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES,
     },
     toolkit::{
         array::AFloat,
@@ -12,7 +9,7 @@ use crate::{
     },
 };
 use bytes::BufMut;
-use core::mem::forget;
+use core::mem;
 
 fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
     let (target, remain) = bytes.split_at(to_nbytes::<i64>(1));
@@ -52,7 +49,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let mut bytes: Vec<u8> = unsafe {
             Vec::from_raw_parts(aligned_bytes.as_ptr() as *mut u8, 0, total_aligned_nbytes)
         };
-        forget(aligned_bytes);
+        mem::forget(aligned_bytes);
 
         bytes.put_i64_le(index_nbytes as i64);
         bytes.put_i64_le(columns_nbytes as i64);

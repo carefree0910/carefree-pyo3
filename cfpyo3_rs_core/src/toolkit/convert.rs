@@ -1,4 +1,4 @@
-use core::mem::{forget, size_of};
+use core::mem;
 
 /// get a bytes representation of <T> values, in a complete zero-copy way
 ///
@@ -23,9 +23,9 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
 /// - `size_of::<U>() * vec.len()` is a multiple of `size_of::<T>()`.
 #[inline]
 pub unsafe fn from_vec<T: Sized, U>(vec: Vec<U>) -> Vec<T> {
-    let values_len = size_of::<U>() * vec.len() / size_of::<T>();
+    let values_len = mem::size_of::<U>() * vec.len() / mem::size_of::<T>();
     let results = unsafe { Vec::from_raw_parts(vec.as_ptr() as *mut T, values_len, values_len) };
-    forget(vec);
+    mem::forget(vec);
     results
 }
 
@@ -41,7 +41,7 @@ pub unsafe fn from_bytes<T: Sized>(bytes: Vec<u8>) -> Vec<T> {
 
 #[inline]
 pub const fn to_nbytes<T: Sized>(values_len: usize) -> usize {
-    values_len * size_of::<T>()
+    values_len * mem::size_of::<T>()
 }
 
 #[cfg(test)]
