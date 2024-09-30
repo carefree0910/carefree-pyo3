@@ -8,7 +8,7 @@ resolver = "2"
 
 [workspace.package]
 
-version = "0.1.9"
+version = "0.1.10"
 
 edition = "2021"
 authors = ["carefree0910 <syameimaru.saki@gmail.com>"]
@@ -25,5 +25,5 @@ license-file = "LICENSE"
 # please make sure the `version`s used here are the same as the
 # `version` defined above (in `workspace.package`)
 
-cfpyo3_rs_core = { path = "cfpyo3_rs_core", version = "0.1.9" }
-cfpyo3_rs_bindings = { path = "cfpyo3_rs_bindings", version = "0.1.9" }
+cfpyo3_rs_core = { path = "cfpyo3_rs_core", version = "0.1.10" }
+cfpyo3_rs_bindings = { path = "cfpyo3_rs_bindings", version = "0.1.10" }
