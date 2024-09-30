@@ -121,13 +121,17 @@ class DataFrame:
         return pd.DataFrame(df.values, index=df.index, columns=df.columns, copy=False)
 
     @classmethod
-    def from_pandas(cls, df: "pd.DataFrame") -> "DataFrame":
+    def to_py_df(cls, df: "pd.DataFrame") -> "DataFrameF64":
         import numpy as np
 
         index = np.require(df.index.values, "datetime64[ns]", "C")
         columns = np.require(df.columns.values, f"S{COLUMNS_NBYTES}", "C")
         values = np.require(df.values, np.float64, "C")
-        return DataFrame(cls.bindings.py_cls.new(index, columns, values))
+        return cls.bindings.py_cls.new(index, columns, values)
+
+    @classmethod
+    def from_pandas(cls, df: "pd.DataFrame") -> "DataFrame":
+        return DataFrame(cls.to_py_df(df))
 
     def save(self, path: PathLike) -> None:
         self._df.save(str(path))
