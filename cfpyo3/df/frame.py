@@ -1,6 +1,8 @@
 from os import PathLike
+from typing import Type
 from typing import Tuple
 from typing import Union
+from typing import NamedTuple
 from typing import TYPE_CHECKING
 
 from cfpyo3._rs.df import COLUMNS_NBYTES
@@ -25,6 +27,39 @@ def rhs_to_np(rhs: RHS) -> "np.ndarray":
     return rhs
 
 
+class DataFrameBindings(NamedTuple):
+    """
+    The `bindings` is useful iff you are trying to extend `cfpyo3_rs_core` /
+    `cfpyo3_rs_bindings` with your own rust codes. In this case, you should
+    re-export the `DataFrameF64` / `OwnedDataFrameF64` classes and set the `bindings`
+    class attribute of `DataFrame` to your re-exported ones.
+
+    The reason behind is that pyo3 will treat the same `[pyclass]` differently when
+    it is added to different rust pymodules.
+
+    For example, in this package, the `DataFrameF64` is binded to `cfpyo3` pymodule.
+    If you reused the rust `DataFrameF64` in your own rust codes and binded them to
+    your own pymodule, pyo3 will think your `DataFrameF64` is DIFFERENT from the one
+    in `cfpyo3`, and therefore will reject your `DataFrameF64` to be passed to methods
+    defined in `cfpyo3`, so `DataFrame` will not be usable.
+
+    In this case, you can simply re-export the `DataFrameF64` in your own pymodule and
+    set the `DataFrame.bindings` to your re-exported `DataFrameF64` class:
+
+    ```python
+    from cfpyo3.df import DataFrame
+    from cfpyo3.df import DataFrameBindings
+    from your_pymodule import DataFrameF64
+    from your_pymodule import OwnedDataFrameF64
+
+    DataFrame.bindings = DataFrameBindings(DataFrameF64, OwnedDataFrameF64)
+    ```
+    """
+
+    py_cls: Type[DataFrameF64]
+    rs_cls: Type[OwnedDataFrameF64]
+
+
 class DataFrame:
     """
     A DataFrame which aims to efficiently process a specific type of data:
@@ -32,6 +67,8 @@ class DataFrame:
     - columns: S{COLUMNS_NBYTES}
     - values: f64
     """
+
+    bindings: DataFrameBindings = DataFrameBindings(DataFrameF64, OwnedDataFrameF64)
 
     def __init__(self, _df: TDF) -> None:
         self._df = _df
@@ -61,7 +98,7 @@ class DataFrame:
         df = self.py_df
         index = np.ascontiguousarray(df.index[indices])
         values = np.ascontiguousarray(df.values[indices])
-        return DataFrame(DataFrameF64.new(index, df.columns, values))
+        return DataFrame(self.bindings.py_cls.new(index, df.columns, values))
 
     def pow(self, exponent: float) -> "DataFrame":
         df = self.py_df
@@ -86,16 +123,17 @@ class DataFrame:
         index = np.require(df.index.values, "datetime64[ns]", "C")
         columns = np.require(df.columns.values, f"S{COLUMNS_NBYTES}", "C")
         values = np.require(df.values, np.float64, "C")
-        return DataFrame(DataFrameF64.new(index, columns, values))
+        return DataFrame(cls.bindings.py_cls.new(index, columns, values))
 
     def save(self, path: PathLike) -> None:
         self._df.save(str(path))
 
-    @staticmethod
-    def load(path: PathLike) -> "DataFrame":
-        return DataFrame(OwnedDataFrameF64.load(str(path)))
+    @classmethod
+    def load(cls, path: PathLike) -> "DataFrame":
+        return DataFrame(cls.bindings.rs_cls.load(str(path)))
 
 
 __all__ = [
     "DataFrame",
+    "DataFrameBindings",
 ]
