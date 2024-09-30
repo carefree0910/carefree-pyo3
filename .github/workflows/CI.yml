@@ -202,3 +202,4 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: rustup update stable && rustup default stable
       - run: cargo publish --manifest-path cfpyo3_rs_core/Cargo.toml --token ${{ secrets.CRATES_TOKEN }}
+      - run: cargo publish --manifest-path cfpyo3_rs_bindings/Cargo.toml --token ${{ secrets.CRATES_TOKEN }}
