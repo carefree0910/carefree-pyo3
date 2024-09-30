@@ -1,7 +1,6 @@
 use numpy::{ndarray::ArrayView2, IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::{prelude::*, py_run};
 
-mod df;
 mod toolkit;
 
 macro_rules! register_submodule {
@@ -26,8 +25,8 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let toolkit_module = register_submodule!(rs_module, "cfpyo3._rs.toolkit");
 
     df_module.add("COLUMNS_NBYTES", cfpyo3_core::df::COLUMNS_NBYTES)?;
-    df_module.add_class::<df::DataFrameF64>()?;
-    df_module.add_class::<df::OwnedDataFrameF64>()?;
+    df_module.add_class::<cfpyo3_core::py::df::DataFrameF64>()?;
+    df_module.add_class::<cfpyo3_core::py::df::OwnedDataFrameF64>()?;
 
     let misc_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.misc");
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
