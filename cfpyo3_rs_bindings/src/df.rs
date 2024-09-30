@@ -38,14 +38,14 @@ pub mod io;
 pub mod meta;
 pub mod ops;
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct DataFrameF64 {
     pub index: Py<PyArray1<IndexDtype>>,
     pub columns: Py<PyArray1<ColumnsDtype>>,
     pub values: Py<PyArray2<f64>>,
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 pub struct OwnedDataFrameF64 {
     pub index: Array1<IndexDtype>,
     pub columns: Array1<ColumnsDtype>,
