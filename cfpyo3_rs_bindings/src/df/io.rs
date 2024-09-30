@@ -2,7 +2,7 @@ use super::{meta::WithCore, DataFrameF64, OwnedDataFrameF64};
 use cfpyo3_core::df::DataFrame;
 use pyo3::prelude::*;
 
-pub(super) trait IOs: WithCore {
+pub trait IOs: WithCore {
     fn save(&self, py: Python, path: &str) -> PyResult<()> {
         self.to_core(py)
             .save(path)

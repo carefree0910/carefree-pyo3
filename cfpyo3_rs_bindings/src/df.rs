@@ -34,9 +34,9 @@ use numpy::{
 };
 use pyo3::prelude::*;
 
-mod io;
-mod meta;
-mod ops;
+pub mod io;
+pub mod meta;
+pub mod ops;
 
 #[pyclass]
 pub struct DataFrameF64 {

@@ -6,7 +6,7 @@ use numpy::{
 };
 use pyo3::prelude::*;
 
-pub(super) trait WithCore {
+pub trait WithCore {
     fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64>;
     fn from_core(py: Python, df: DataFrame<f64>) -> Self
     where

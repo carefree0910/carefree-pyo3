@@ -2,7 +2,7 @@ use super::{meta::WithCore, DataFrameF64, OwnedDataFrameF64};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
-pub(super) trait Ops: WithCore {
+pub trait Ops: WithCore {
     fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.to_core(py).mean_axis1(8).into_pyarray_bound(py)
     }
