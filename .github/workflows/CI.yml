@@ -109,7 +109,7 @@ jobs:
           activate-environment: test
           python-version: ${{ env.PYTHON_VERSION }}
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo test --workspace --exclude cfpyo3_rs_py -F ${{ matrix.features }} --verbose
+      - run: cargo test -p cfpyo3_rs_core -F ${{ matrix.features }} --verbose
 
   build-wheels:
     needs: [test-py, test-rs]
