@@ -136,6 +136,12 @@ class DataFrame:
     def load(cls, path: PathLike) -> "DataFrame":
         return DataFrame(cls.bindings.rs_cls.load(str(path)))
 
+    def to_py(self) -> None:
+        self.py_df
+
+    def to_owned(self) -> None:
+        self.rs_df
+
 
 __all__ = [
     "DataFrame",
