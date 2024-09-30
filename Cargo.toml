@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cfpyo3_rs_core",
+    "cfpyo3_rs_bindings",
     "cfpyo3_rs_py",
 ]
 resolver = "2"

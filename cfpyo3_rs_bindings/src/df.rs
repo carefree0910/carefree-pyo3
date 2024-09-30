@@ -27,7 +27,7 @@
 //! If we need to acquire GIL everytime a single read is performed, it will be basically single threaded and
 //! therefore impossible to utilize the modern hardware to its full potential.
 
-use crate::df::{ColumnsDtype, IndexDtype};
+use cfpyo3_core::df::{ColumnsDtype, IndexDtype};
 use numpy::{
     ndarray::{Array1, Array2},
     PyArray1, PyArray2,

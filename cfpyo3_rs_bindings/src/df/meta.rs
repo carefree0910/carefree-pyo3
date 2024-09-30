@@ -1,5 +1,5 @@
 use super::{DataFrameF64, OwnedDataFrameF64};
-use crate::df::{ColumnsDtype, DataFrame, IndexDtype};
+use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
     PyArray1, PyArray2, PyArrayMethods, ToPyArray,

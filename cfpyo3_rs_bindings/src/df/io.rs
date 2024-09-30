@@ -1,5 +1,5 @@
 use super::{meta::WithCore, DataFrameF64, OwnedDataFrameF64};
-use crate::df::DataFrame;
+use cfpyo3_core::df::DataFrame;
 use pyo3::prelude::*;
 
 pub(super) trait IOs: WithCore {

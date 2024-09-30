@@ -1,5 +1,5 @@
 [package]
-name = "cfpyo3_rs_py"
+name = "cfpyo3_rs_bindings"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,12 +12,10 @@ categories.workspace = true
 license-file.workspace = true
 
 [lib]
-name = "cfpyo3"
-crate-type = ["cdylib"]
+name = "cfpyo3_bindings"
+crate-type = ["rlib"]
 
 [dependencies]
 cfpyo3_rs_core = { path = "../cfpyo3_rs_core" }
-cfpyo3_rs_bindings = { path = "../cfpyo3_rs_bindings" }
 numpy = "0.21.0"
-paste = "1.0.15"
 pyo3 = { version = "0.21.0", features = ["abi3-py38", "chrono", "extension-module", "multiple-pymethods"] }
