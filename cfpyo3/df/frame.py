@@ -79,14 +79,14 @@ class DataFrame:
     @property
     def py_df(self) -> "DataFrameF64":
         if self.is_owned:
-            self._df = self._df.to_py()
-        return self._df
+            self._df = self._df.to_py()  # type: ignore
+        return self._df  # type: ignore
 
     @property
     def rs_df(self) -> "OwnedDataFrameF64":
         if not self.is_owned:
-            self._df = self._df.to_owned()
-        return self._df
+            self._df = self._df.to_owned()  # type: ignore
+        return self._df  # type: ignore
 
     @property
     def is_owned(self) -> bool:
