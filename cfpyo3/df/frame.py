@@ -46,6 +46,12 @@ class DataFrame:
         return self._df
 
     @property
+    def rs_df(self) -> "OwnedDataFrameF64":
+        if isinstance(self._df, DataFrameF64):
+            self._df = self._df.to_owned()
+        return self._df
+
+    @property
     def shape(self) -> Tuple[int, int]:
         return self.py_df.shape
 

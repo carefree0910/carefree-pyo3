@@ -115,6 +115,14 @@ impl DataFrameF64 {
             values,
         }
     }
+
+    fn to_owned(&self, py: Python) -> OwnedDataFrameF64 {
+        OwnedDataFrameF64 {
+            index: self.get_index_array(py).to_owned(),
+            columns: self.get_columns_array(py).to_owned(),
+            values: self.get_values_array(py).to_owned(),
+        }
+    }
 }
 
 #[pymethods]
