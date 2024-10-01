@@ -48,6 +48,20 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
             }
             paste::item! {
                 #[pyfunction]
+                pub fn [< masked_mean_axis1_ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    valid_mask: PyReadonlyArray2<bool>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let valid_mask = valid_mask.as_array();
+                    let num_threads = num_threads.unwrap_or(8);
+                    cfpyo3_core::toolkit::array::masked_mean_axis1(&a, &valid_mask, num_threads).into_pyarray_bound(py)
+                }
+            }
+            paste::item! {
+                #[pyfunction]
                 pub fn [< corr_axis1_ $type_str >]<'py>(
                     py: Python<'py>,
                     a: PyReadonlyArray2<$dtype>,
@@ -58,6 +72,22 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let b = b.as_array();
                     let num_threads = num_threads.unwrap_or(8);
                     cfpyo3_core::toolkit::array::corr_axis1(&a, &b, num_threads).into_pyarray_bound(py)
+                }
+            }
+            paste::item! {
+                #[pyfunction]
+                pub fn [< masked_corr_axis1_ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    b: PyReadonlyArray2<$dtype>,
+                    valid_mask: PyReadonlyArray2<bool>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let b = b.as_array();
+                    let valid_mask = valid_mask.as_array();
+                    let num_threads = num_threads.unwrap_or(8);
+                    cfpyo3_core::toolkit::array::masked_corr_axis1(&a, &b, &valid_mask, num_threads).into_pyarray_bound(py)
                 }
             }
             paste::item! {
@@ -76,8 +106,12 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     array_ops_impl!(f64, f64);
     array_module.add_function(wrap_pyfunction!(mean_axis1_f32, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(mean_axis1_f64, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(masked_mean_axis1_f32, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(masked_mean_axis1_f64, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(corr_axis1_f32, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(corr_axis1_f64, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(masked_corr_axis1_f32, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(masked_corr_axis1_f64, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(fast_concat_2d_axis0_f32, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(fast_concat_2d_axis0_f64, &array_module)?)?;
 

@@ -6,8 +6,12 @@ from typing import TYPE_CHECKING
 
 from cfpyo3._rs.toolkit.array import mean_axis1_f32
 from cfpyo3._rs.toolkit.array import mean_axis1_f64
+from cfpyo3._rs.toolkit.array import masked_mean_axis1_f32
+from cfpyo3._rs.toolkit.array import masked_mean_axis1_f64
 from cfpyo3._rs.toolkit.array import corr_axis1_f32
 from cfpyo3._rs.toolkit.array import corr_axis1_f64
+from cfpyo3._rs.toolkit.array import masked_corr_axis1_f32
+from cfpyo3._rs.toolkit.array import masked_corr_axis1_f64
 from cfpyo3._rs.toolkit.array import fast_concat_2d_axis0_f32
 from cfpyo3._rs.toolkit.array import fast_concat_2d_axis0_f64
 
@@ -44,6 +48,22 @@ def mean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
     )
 
 
+def masked_mean_axis1(
+    array: "np.ndarray",
+    mask: "np.ndarray",
+    num_threads: int = 8,
+) -> "np.ndarray":
+    return _dispatch(
+        "masked_mean_axis1",
+        masked_mean_axis1_f32,
+        masked_mean_axis1_f64,
+        array,
+        array,
+        mask,
+        num_threads=num_threads,
+    )
+
+
 def corr_axis1(a: "np.ndarray", b: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
     return _dispatch(
         "corr_axis1",
@@ -52,6 +72,24 @@ def corr_axis1(a: "np.ndarray", b: "np.ndarray", num_threads: int = 8) -> "np.nd
         a,
         a,
         b,
+        num_threads=num_threads,
+    )
+
+
+def masked_corr_axis1(
+    a: "np.ndarray",
+    b: "np.ndarray",
+    mask: "np.ndarray",
+    num_threads: int = 8,
+) -> "np.ndarray":
+    return _dispatch(
+        "masked_corr_axis1",
+        masked_corr_axis1_f32,
+        masked_corr_axis1_f64,
+        a,
+        a,
+        b,
+        mask,
         num_threads=num_threads,
     )
 

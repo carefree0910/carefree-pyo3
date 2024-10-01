@@ -181,18 +181,25 @@ fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
         sum / num
     }
 }
+fn masked_mean<T: AFloat>(a: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
+    let mut sum = T::zero();
+    let mut num = T::zero();
+    for (&x, &valid) in zip(a.iter(), valid_mask.iter()) {
+        if !valid {
+            continue;
+        }
+        sum += x;
+        num += T::one();
+    }
+    if num.is_zero() {
+        T::nan()
+    } else {
+        sum / num
+    }
+}
 
-fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
-    let valid_indices: Vec<usize> = zip(a.iter(), b.iter())
-        .enumerate()
-        .filter_map(|(i, (&x, &y))| {
-            if x.is_nan() || y.is_nan() {
-                None
-            } else {
-                Some(i)
-            }
-        })
-        .collect();
+#[inline]
+fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<usize>) -> T {
     if valid_indices.is_empty() {
         return T::nan();
     }
@@ -206,6 +213,27 @@ fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
     let var1 = a.dot(&a);
     let var2 = b.dot(&b);
     cov / (var1.sqrt() * var2.sqrt())
+}
+fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
+    let valid_indices: Vec<usize> = zip(a.iter(), b.iter())
+        .enumerate()
+        .filter_map(|(i, (&x, &y))| {
+            if x.is_nan() || y.is_nan() {
+                None
+            } else {
+                Some(i)
+            }
+        })
+        .collect();
+    corr_with(a, b, valid_indices)
+}
+fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
+    let valid_indices = valid_mask
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &valid)| if valid { Some(i) } else { None })
+        .collect();
+    corr_with(a, b, valid_indices)
 }
 
 pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
@@ -228,6 +256,30 @@ pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     }
     res
 }
+pub fn masked_mean_axis1<T: AFloat>(
+    a: &ArrayView2<T>,
+    valid_mask: &ArrayView2<bool>,
+    num_threads: usize,
+) -> Vec<T> {
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    if num_threads <= 1 {
+        enumerate(zip(a.rows(), valid_mask.rows())).for_each(|(i, (row, valid_mask))| {
+            slice.set(i, masked_mean(row, valid_mask));
+        });
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+        pool.scope(|s| {
+            enumerate(zip(a.rows(), valid_mask.rows())).for_each(|(i, (row, valid_mask))| {
+                s.spawn(move |_| slice.set(i, masked_mean(row, valid_mask)));
+            });
+        });
+    }
+    res
+}
 
 pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
@@ -245,6 +297,35 @@ pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: 
             zip(a.rows(), b.rows()).enumerate().for_each(|(i, (a, b))| {
                 s.spawn(move |_| slice.set(i, corr(a, b)));
             });
+        });
+    }
+    res
+}
+pub fn masked_corr_axis1<T: AFloat>(
+    a: &ArrayView2<T>,
+    b: &ArrayView2<T>,
+    valid_mask: &ArrayView2<bool>,
+    num_threads: usize,
+) -> Vec<T> {
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    if num_threads <= 1 {
+        izip!(a.rows(), b.rows(), valid_mask.rows())
+            .enumerate()
+            .for_each(|(i, (a, b, valid_mask))| {
+                slice.set(i, masked_corr(a, b, valid_mask));
+            });
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+        pool.scope(move |s| {
+            izip!(a.rows(), b.rows(), valid_mask.rows())
+                .enumerate()
+                .for_each(|(i, (a, b, valid_mask))| {
+                    s.spawn(move |_| slice.set(i, masked_corr(a, b, valid_mask)));
+                });
         });
     }
     res
