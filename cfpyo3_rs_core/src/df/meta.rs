@@ -3,8 +3,9 @@ use crate::{
     df::{ColumnsDtype, IndexDtype},
     toolkit::array::AFloat,
 };
+use anyhow::Result;
 use numpy::{
-    ndarray::{Array1, Array2, ArrayView1, ArrayView2, CowArray, ShapeError},
+    ndarray::{Array1, Array2, ArrayView1, ArrayView2, CowArray},
     Ix1, Ix2,
 };
 
@@ -51,7 +52,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         index: Vec<IndexDtype>,
         columns: Vec<ColumnsDtype>,
         values: Vec<T>,
-    ) -> Result<Self, ShapeError> {
+    ) -> Result<Self> {
         let index_shape = index.len();
         let columns_shape = columns.len();
         Ok(Self::new(

@@ -3,14 +3,15 @@ use crate::toolkit::{
     array::AFloat,
     convert::{from_bytes, to_bytes, to_nbytes},
 };
-use std::io::{self, Read, Write};
+use anyhow::Result;
+use std::io::{Read, Write};
 
 mod buffer;
 mod bytes;
 mod fs;
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
-    pub fn read(reader: &mut impl Read) -> io::Result<Self> {
+    pub fn read(reader: &mut impl Read) -> Result<Self> {
         let mut nbytes_buffer = [0u8; 8];
         reader.read_exact(&mut nbytes_buffer)?;
         let index_nbytes = i64::from_le_bytes(nbytes_buffer) as usize;
@@ -34,10 +35,9 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
             )
         };
         DataFrame::from_owned(index, columns, values)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 
-    pub fn write(&self, writer: &mut impl Write) -> io::Result<()> {
+    pub fn write(&self, writer: &mut impl Write) -> Result<()> {
         let index = &self.index;
         let columns = &self.columns;
         let index_nbytes = to_nbytes::<IndexDtype>(index.len()) as i64;

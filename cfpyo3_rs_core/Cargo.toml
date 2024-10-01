@@ -17,6 +17,7 @@ crate-type = ["rlib"]
 bench = false
 
 [dependencies]
+anyhow = { workspace = true }
 bytes = { version = "1.7.2" }
 futures = "0.3.30"
 itertools = "0.13.0"

@@ -4,19 +4,15 @@ use pyo3::prelude::*;
 
 pub trait IOs: WithCore {
     fn save(&self, py: Python, path: &str) -> PyResult<()> {
-        self.to_core(py)
-            .save(path)
-            .map_err(PyErr::new::<pyo3::exceptions::PyIOError, _>)
+        self.to_core(py).save(path)?;
+        Ok(())
     }
 
     fn load(py: Python, path: &str) -> PyResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self::from_core(
-            py,
-            DataFrame::load(path).map_err(PyErr::new::<pyo3::exceptions::PyIOError, _>)?,
-        ))
+        Ok(Self::from_core(py, DataFrame::load(path)?))
     }
 }
 

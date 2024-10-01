@@ -17,5 +17,6 @@ crate-type = ["rlib"]
 
 [dependencies]
 cfpyo3_rs_core = { workspace = true }
+anyhow = { workspace = true }
 numpy = { workspace = true }
 pyo3 = { workspace = true }

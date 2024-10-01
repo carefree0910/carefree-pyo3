@@ -30,5 +30,6 @@ cfpyo3_rs_bindings = { path = "cfpyo3_rs_bindings", version = "0.1.10" }
 
 # other common dependencies
 
+anyhow = "1.0.89"
 numpy = "0.21.0"
-pyo3 = { version = "0.21.0", features = ["abi3-py38", "chrono", "extension-module", "multiple-pymethods"] }
+pyo3 = { version = "0.21.0", features = ["abi3-py38", "anyhow", "chrono", "extension-module", "multiple-pymethods"] }

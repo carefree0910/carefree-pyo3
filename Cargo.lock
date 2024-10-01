@@ -172,6 +172,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "cfpyo3_rs_bindings"
 version = "0.1.10"
 dependencies = [
+ "anyhow",
  "cfpyo3_rs_core",
  "numpy",
  "pyo3",
@@ -181,6 +182,7 @@ dependencies = [
 name = "cfpyo3_rs_core"
 version = "0.1.10"
 dependencies = [
+ "anyhow",
  "bytes",
  "criterion",
  "futures",
@@ -1220,6 +1222,7 @@ version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5e00b96a521718e08e03b1a622f01c8a8deb50719335de3f60b3b3950f069d8"
 dependencies = [
+ "anyhow",
  "cfg-if",
  "chrono",
  "indoc",

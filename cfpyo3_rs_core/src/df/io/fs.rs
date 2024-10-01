@@ -1,16 +1,14 @@
 use crate::{df::DataFrame, toolkit::array::AFloat};
-use std::{
-    fs::File,
-    io::{self},
-};
+use anyhow::Result;
+use std::fs::File;
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
-    pub fn save(&self, path: &str) -> io::Result<()> {
+    pub fn save(&self, path: &str) -> Result<()> {
         let mut file = File::create(path)?;
         self.write(&mut file)
     }
 
-    pub fn load(path: &str) -> io::Result<Self> {
+    pub fn load(path: &str) -> Result<Self> {
         let mut file = File::open(path)?;
         DataFrame::read(&mut file)
     }

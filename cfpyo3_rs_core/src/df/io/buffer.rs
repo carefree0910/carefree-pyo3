@@ -3,8 +3,8 @@ use crate::df::DataFrame;
 use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
 use crate::toolkit::convert::{from_bytes, to_nbytes};
+use anyhow::Result;
 use bytes::Buf;
-use numpy::ndarray::ShapeError;
 
 fn extract_bytes<T: Sized>(buf: &mut impl Buf, nbytes: usize) -> Vec<T> {
     // `advance` will happen inside `copy_to_bytes`
@@ -30,7 +30,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     /// This method will panic if:
     /// - the bytes behind the `buf` is not of the desired memory layout.
     /// - the `buf` is not fully consumed after loading.
-    pub fn from_buffer(mut buf: impl Buf) -> Result<Self, ShapeError> {
+    pub fn from_buffer(mut buf: impl Buf) -> Result<Self> {
         let index_nbytes = buf.get_i64_le() as usize;
         let columns_nbytes = buf.get_i64_le() as usize;
 
