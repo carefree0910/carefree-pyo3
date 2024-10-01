@@ -27,3 +27,8 @@ license-file = "LICENSE"
 
 cfpyo3_rs_core = { path = "cfpyo3_rs_core", version = "0.1.10" }
 cfpyo3_rs_bindings = { path = "cfpyo3_rs_bindings", version = "0.1.10" }
+
+# other common dependencies
+
+numpy = "0.21.0"
+pyo3 = { version = "0.21.0", features = ["abi3-py38", "chrono", "extension-module", "multiple-pymethods"] }

@@ -17,5 +17,5 @@ crate-type = ["rlib"]
 
 [dependencies]
 cfpyo3_rs_core = { workspace = true }
-numpy = "0.21.0"
-pyo3 = { version = "0.21.0", features = ["abi3-py38", "chrono", "extension-module", "multiple-pymethods"] }
+numpy = { workspace = true }
+pyo3 = { workspace = true }
