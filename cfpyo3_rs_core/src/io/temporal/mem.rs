@@ -328,14 +328,14 @@ pub trait ColumnIndicesGetter {
 }
 struct CachedGetter<'a>(
     Arc<Mutex<HashMap<usize, Vec<usize>>>>,
-    &'a ArrayView1<'a, ColumnsDtype>,
+    ArrayView1<'a, ColumnsDtype>,
 );
 impl<'a> CachedGetter<'a> {
-    fn new(columns: &'a ArrayView1<'a, ColumnsDtype>) -> Self {
+    fn new(columns: ArrayView1<'a, ColumnsDtype>) -> Self {
         Self(Arc::new(Mutex::new(HashMap::new())), columns)
     }
-    fn new_vec(columns: &[&'a ArrayView1<'a, ColumnsDtype>]) -> Vec<Self> {
-        columns.iter().map(|x| Self::new(x)).collect()
+    fn new_vec(columns: &'a [ArrayView1<'a, ColumnsDtype>]) -> Vec<Self> {
+        columns.iter().map(|x| Self::new(x.view())).collect()
     }
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0), self.1)
@@ -347,7 +347,7 @@ impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
         if let Some(indices) = cache.get(&i) {
             indices.clone()
         } else {
-            let indices = batch_searchsorted(&date_columns.view(), self.1);
+            let indices = batch_searchsorted(&date_columns.view(), &self.1);
             cache.insert(i, indices.clone());
             indices
         }
@@ -791,7 +791,7 @@ pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
         time_idx_to_date_idx,
         date_columns_offset,
         |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
-        CachedGetter::new(columns),
+        CachedGetter::new(columns.view()),
         SHMFetcher::new(compact_data),
         &mut UnsafeSlice::new(flattened_slice),
         None,
@@ -805,7 +805,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
+    columns: &'b [ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &[&ArrayView1<i64>],
     time_idx_to_date_idx: &[&ArrayView1<i64>],
@@ -853,7 +853,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                                 datetime_start,
                                 datetime_end,
                                 datetime_len,
-                                columns,
+                                &columns,
                                 num_ticks_per_day,
                                 full_index,
                                 time_idx_to_date_idx,
@@ -893,11 +893,11 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
 /// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
 /// - `compact_columns` (`S`) - the full, compact columns.
 /// - `sliced_data` - the sliced data, each slice contains the flattened data of each date.
-pub fn shm_sliced_column_contiguous<'a, 'b, T: AFloat>(
+pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &'b ArrayView1<'b, ColumnsDtype>,
+    columns: ArrayView1<ColumnsDtype>,
     num_ticks_per_day: i64,
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
@@ -914,7 +914,7 @@ pub fn shm_sliced_column_contiguous<'a, 'b, T: AFloat>(
         datetime_start,
         datetime_end,
         datetime_len,
-        columns,
+        &columns,
         num_ticks_per_day,
         full_index,
         time_idx_to_date_idx,
@@ -934,7 +934,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
+    columns: &'b [ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &[&ArrayView1<i64>],
     time_idx_to_date_idx: &[&ArrayView1<i64>],
@@ -979,7 +979,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                             datetime_start,
                             datetime_end,
                             datetime_len,
-                            columns,
+                            &columns,
                             num_ticks_per_day,
                             full_index,
                             time_idx_to_date_idx,
@@ -1003,7 +1003,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
+    columns: &'b [ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
@@ -1044,7 +1044,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                         datetime_start,
                         datetime_end,
                         datetime_len,
-                        columns,
+                        &columns,
                         num_ticks_per_day,
                         full_index,
                         time_idx_to_date_idx,
@@ -1068,7 +1068,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
+    columns: &'b [ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &[&ArrayView1<i64>],
     time_idx_to_date_idx: &[&ArrayView1<i64>],
@@ -1113,7 +1113,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                             datetime_start,
                             datetime_end,
                             datetime_len,
-                            columns,
+                            &columns,
                             num_ticks_per_day,
                             full_index,
                             time_idx_to_date_idx,
@@ -1138,7 +1138,7 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &[&'b ArrayView1<'b, ColumnsDtype>],
+    columns: &'b [ArrayView1<'b, ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &[&ArrayView1<i64>],
     time_idx_to_date_idx: &[&ArrayView1<i64>],
@@ -1156,20 +1156,34 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
     let mut flattened = vec![T::zero(); bz * num_data_per_batch];
     let flattened_slice = flattened.as_mut_slice();
-    let columns_indices_getters = CachedGetter::new_vec(columns);
     let num_columns_per_task = (num_columns / 200).max(10.min(num_columns));
     let num_columns_task = num_columns / num_columns_per_task;
-    let num_tasks = bz * n_groups * num_columns_task;
-    let num_threads = num_threads.min(num_tasks);
+    let num_threads = num_threads.min(bz * n_groups * num_columns_task);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()
         .unwrap();
     pool.scope(move |s: &rayon::Scope<'_>| {
         let flattened_slice = UnsafeSlice::new(flattened_slice);
+        let num_total_columns_task = bz * num_columns_task;
+        let mut columns_indices_getters = Vec::with_capacity(num_total_columns_task);
+        for columns in columns.iter().take(bz) {
+            for n in 0..num_columns_task {
+                let column_start = n * num_columns_per_task;
+                let column_end = if n == num_columns_task - 1 {
+                    num_columns
+                } else {
+                    (n + 1) * num_columns_per_task
+                };
+                columns_indices_getters.push(CachedGetter::new(
+                    columns.slice(s![column_start..column_end]),
+                ));
+            }
+        }
+
         let mut channel_pad_start = 0;
         let mut channel_pad_end = nc;
-        (0..n_groups).for_each(|g| {
+        for g in 0..n_groups {
             let full_index = full_index[g];
             let time_idx_to_date_idx = time_idx_to_date_idx[g];
             let date_columns_offset = date_columns_offset[g];
@@ -1180,48 +1194,46 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
             let multiplier = multipliers[g];
             let next_pad_start = channel_pad_start + multiplier;
             channel_pad_end -= multiplier;
-            datetime_start
-                .iter()
-                .enumerate()
-                .for_each(|(b, &datetime_start)| {
-                    let datetime_end = datetime_end[b];
-                    let columns = columns[b];
-                    let offset = b * num_data_per_batch;
-                    (0..num_columns_task).for_each(|n| {
-                        let column_start = n * num_columns_per_task;
-                        let column_end = if n == num_columns_task - 1 {
-                            num_columns
-                        } else {
-                            (n + 1) * num_columns_per_task
-                        };
-                        let columns_indices_getter = columns_indices_getters[b].clone();
-                        s.spawn(move |_| {
-                            column_contiguous(
-                                None,
-                                datetime_start,
-                                datetime_end,
-                                datetime_len,
-                                &columns.slice(s![column_start..column_end]),
-                                num_ticks_per_day,
-                                full_index,
-                                time_idx_to_date_idx,
-                                date_columns_offset,
-                                columns_getter,
-                                columns_indices_getter,
-                                RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
-                                &mut flattened_slice.slice(offset, offset + num_data_per_batch),
-                                Some(multiplier),
-                                Some(Offsets {
-                                    column_offset: column_start as i64,
-                                    channel_pad_start,
-                                    channel_pad_end,
-                                }),
-                            );
-                        });
+            for b in 0..bz {
+                let datetime_start = datetime_start[b];
+                let datetime_end = datetime_end[b];
+                let offset = b * num_data_per_batch;
+                for n in 0..num_columns_task {
+                    let bn_index = b * num_columns_task + n;
+                    let column_start = n * num_columns_per_task;
+                    let column_end = if n == num_columns_task - 1 {
+                        num_columns
+                    } else {
+                        (n + 1) * num_columns_per_task
+                    };
+                    let columns_indices_getter = columns_indices_getters[bn_index].clone();
+                    s.spawn(move |_| {
+                        column_contiguous(
+                            None,
+                            datetime_start,
+                            datetime_end,
+                            datetime_len,
+                            &columns[b].slice(s![column_start..column_end]),
+                            num_ticks_per_day,
+                            full_index,
+                            time_idx_to_date_idx,
+                            date_columns_offset,
+                            columns_getter,
+                            columns_indices_getter,
+                            RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
+                            &mut flattened_slice.slice(offset, offset + num_data_per_batch),
+                            Some(multiplier),
+                            Some(Offsets {
+                                column_offset: column_start as i64,
+                                channel_pad_start,
+                                channel_pad_end,
+                            }),
+                        );
                     });
-                });
+                }
+            }
             channel_pad_start = next_pad_start;
-        });
+        }
     });
     flattened
 }
@@ -1488,7 +1500,7 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
             &full_index,
             &time_idx_to_date_idx,
@@ -1518,7 +1530,7 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
             &full_index,
             &time_idx_to_date_idx,
@@ -1548,7 +1560,7 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
             &full_index,
             &time_idx_to_date_idx,
