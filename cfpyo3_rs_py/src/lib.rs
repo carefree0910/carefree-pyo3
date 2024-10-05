@@ -1,22 +1,8 @@
+use cfpyo3_bindings::register_submodule;
 use numpy::{ndarray::ArrayView2, IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::{prelude::*, py_run};
 
 mod toolkit;
-
-macro_rules! register_submodule {
-    ($parent:expr, $hierarchy:expr) => {{
-        let py = $parent.py();
-        let module_name = $hierarchy.split('.').last().unwrap();
-        let submodule = PyModule::new_bound(py, module_name)?;
-        py_run!(
-            py,
-            submodule,
-            concat!("import sys; sys.modules['", $hierarchy, "'] = submodule")
-        );
-        $parent.add_submodule(&submodule)?;
-        submodule
-    }};
-}
 
 #[pymodule]
 fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
