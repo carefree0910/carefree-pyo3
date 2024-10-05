@@ -1,7 +1,8 @@
 use super::Source;
 use crate::df::DataFrame;
 use crate::toolkit::array::AFloat;
-use opendal::{services::S3, Error, Operator, Result};
+use anyhow::Result;
+use opendal::{services::S3, Operator};
 use std::marker::PhantomData;
 
 // core implementations
@@ -15,11 +16,11 @@ impl<T: AFloat> S3Client<T> {
     pub async fn read(&self, key: &str) -> Result<DataFrame<T>> {
         let rv = self.op.read(key).await?;
         DataFrame::from_buffer(rv)
-            .map_err(|e| Error::new(opendal::ErrorKind::Unexpected, e.to_string()))
     }
 
     pub async fn write(&self, key: &str, df: &DataFrame<'_, T>) -> Result<()> {
-        self.op.write(key, df.to_bytes()).await
+        self.op.write(key, df.to_bytes()).await?;
+        Ok(())
     }
 }
 
@@ -49,16 +50,10 @@ impl<T: AFloat> S3Source<T> {
 }
 
 impl<T: AFloat> Source<T> for S3Source<T> {
-    async fn read(&self, date: &str, key: &str) -> DataFrame<T> {
-        self.0
-            .read(self.to_s3_key(date, key).as_str())
-            .await
-            .unwrap()
+    async fn read(&self, date: &str, key: &str) -> Result<DataFrame<T>> {
+        self.0.read(self.to_s3_key(date, key).as_str()).await
     }
-    async fn write(&self, date: &str, key: &str, df: &DataFrame<'_, T>) {
-        self.0
-            .write(self.to_s3_key(date, key).as_str(), df)
-            .await
-            .unwrap()
+    async fn write(&self, date: &str, key: &str, df: &DataFrame<'_, T>) -> Result<()> {
+        self.0.write(self.to_s3_key(date, key).as_str(), df).await
     }
 }
