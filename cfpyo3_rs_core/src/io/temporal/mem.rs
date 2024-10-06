@@ -915,7 +915,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                         });
                     })
             });
-        receiver.iter().try_for_each(|x| x)
+        receiver.iter().take(num_tasks).try_for_each(|x| x)
     })?;
     Ok(flattened)
 }
@@ -1044,7 +1044,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                     });
                 })
         });
-        receiver.iter().try_for_each(|x| x)
+        receiver.iter().take(num_tasks).try_for_each(|x| x)
     })?;
     Ok(flattened)
 }
@@ -1111,7 +1111,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                     i_sender.send(rv).unwrap();
                 });
             });
-        receiver.iter().try_for_each(|x| x)
+        receiver.iter().take(num_tasks).try_for_each(|x| x)
     })?;
     Ok(flattened)
 }
@@ -1184,7 +1184,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                     });
                 })
         });
-        receiver.iter().try_for_each(|x| x)
+        receiver.iter().take(num_tasks).try_for_each(|x| x)
     })?;
     Ok(flattened)
 }
@@ -1215,7 +1215,8 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     let flattened_slice = flattened.as_mut_slice();
     let num_columns_per_task = (num_columns / 200).max(10.min(num_columns));
     let num_columns_task = num_columns / num_columns_per_task;
-    let num_threads = num_threads.min(bz * n_groups * num_columns_task);
+    let num_tasks = bz * n_groups * num_columns_task;
+    let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
@@ -1293,7 +1294,7 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
             }
             channel_pad_start = next_pad_start;
         }
-        receiver.iter().try_for_each(|x| x)
+        receiver.iter().take(num_tasks).try_for_each(|x| x)
     })?;
     Ok(flattened)
 }
