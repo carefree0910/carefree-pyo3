@@ -57,6 +57,7 @@ fn init_client(urls: Vec<String>) -> Result<Mutex<ClusterClient>> {
         .username(username)
         .password(password)
         .connection_timeout(connection_timeout)
+        .response_timeout(connection_timeout)
         .build()?;
     Ok(Mutex::new(client))
 }
