@@ -869,8 +869,8 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
+    let (sender, receiver) = channel();
     pool.scope(move |s| {
-        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         compact_data
             .iter()
@@ -915,8 +915,8 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                         });
                     })
             });
-        receiver.iter().take(num_tasks).try_for_each(|x| x)
-    })?;
+    });
+    receiver.iter().try_for_each(|x| x)?;
     Ok(flattened)
 }
 
@@ -1001,8 +1001,8 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
+    let (sender, receiver) = channel();
     pool.scope(move |s| {
-        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         sliced_data.iter().enumerate().for_each(|(c, sliced_data)| {
             let full_index = full_index[c];
@@ -1044,8 +1044,8 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                     });
                 })
         });
-        receiver.iter().take(num_tasks).try_for_each(|x| x)
-    })?;
+    });
+    receiver.iter().try_for_each(|x| x)?;
     Ok(flattened)
 }
 
@@ -1074,8 +1074,8 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
+    let (sender, receiver) = channel();
     pool.scope(move |s| {
-        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         let columns_getter = |start_idx: i64, end_idx: i64| {
             compact_columns.slice(s![start_idx as isize..end_idx as isize])
@@ -1111,8 +1111,8 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                     i_sender.send(rv).unwrap();
                 });
             });
-        receiver.iter().take(num_tasks).try_for_each(|x| x)
-    })?;
+    });
+    receiver.iter().try_for_each(|x| x)?;
     Ok(flattened)
 }
 
@@ -1142,8 +1142,8 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
+    let (sender, receiver) = channel();
     pool.scope(move |s| {
-        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         (0..nc).for_each(|c| {
             let full_index = full_index[c];
@@ -1184,8 +1184,8 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                     });
                 })
         });
-        receiver.iter().take(num_tasks).try_for_each(|x| x)
-    })?;
+    });
+    receiver.iter().try_for_each(|x| x)?;
     Ok(flattened)
 }
 
@@ -1220,8 +1220,8 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()?;
+    let (sender, receiver) = channel();
     pool.scope(move |s: &rayon::Scope<'_>| {
-        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         let num_total_columns_task = bz * num_columns_task;
         let mut columns_indices_getters = Vec::with_capacity(num_total_columns_task);
@@ -1294,8 +1294,8 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
             }
             channel_pad_start = next_pad_start;
         }
-        receiver.iter().take(num_tasks).try_for_each(|x| x)
-    })?;
+    });
+    receiver.iter().try_for_each(|x| x)?;
     Ok(flattened)
 }
 
