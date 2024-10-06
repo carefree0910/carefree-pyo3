@@ -133,23 +133,23 @@ impl<T: AFloat> RedisClient<T> {
                     #[cfg(feature = "bench-io-mem-redis")]
                     {
                         let now = std::time::Instant::now();
-                        let rv: Vec<u8> = conn.getrange(key, start, end)?;
+                        let rv: Vec<u8> = conn.getrange(key, start, end - 1)?;
                         self.trackers.track(idx, now.elapsed().as_secs_f64());
                         rv
                     }
                     #[cfg(not(feature = "bench-io-mem-redis"))]
                     {
-                        conn.getrange(key, start, end)?
+                        conn.getrange(key, start, end - 1)?
                     }
                 };
-                if rv.len() != (end - start + 1) as usize {
+                if rv.len() != (end - start) as usize {
                     return RedisError::data_not_enough(&format!(
                         "key: {}, start: {}, end: {}; fetched: {}, expected: {}",
                         key,
                         start,
                         end,
                         rv.len(),
-                        end - start + 1
+                        end - start,
                     ));
                 }
                 Ok(Array1::from(unsafe { from_bytes(rv) }))
@@ -178,7 +178,7 @@ impl<T: AFloat> RedisClient<T> {
                         local results = {}
                         for i, range in ipairs(ARGV) do
                             local start, end_ = range:match("(%d+)-(%d+)")
-                            results[i] = redis.call("GETRANGE", key, start, end_)
+                            results[i] = redis.call("GETRANGE", key, start, end_ - 1)
                         end
                         return results
                     "#,
@@ -207,18 +207,18 @@ impl<T: AFloat> RedisClient<T> {
                         "key: {}, fetched (outer): {}, expected (outer): {}",
                         key,
                         rv.len(),
-                        start_indices.len()
+                        start_indices.len(),
                     ));
                 }
                 for (i, i_rv) in rv.iter().enumerate() {
-                    if i_rv.len() != (end_indices[i] - start_indices[i] + 1) as usize {
+                    if i_rv.len() != (end_indices[i] - start_indices[i]) as usize {
                         return RedisError::data_not_enough(&format!(
                             "key: {}, start: {}, end: {}; fetched (inner): {}, expected (inner): {}",
                             key,
                             start_indices[i],
                             end_indices[i],
                             i_rv.len(),
-                            end_indices[i] - start_indices[i] + 1
+                            end_indices[i] - start_indices[i],
                         ));
                     }
                 }
