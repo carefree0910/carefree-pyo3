@@ -12,11 +12,25 @@ use numpy::{
 };
 use redis::{
     cluster::{ClusterClient, ClusterClientBuilder, ClusterConnection},
-    Commands, RedisResult, Script,
+    Commands, Script,
 };
-use std::{env, iter::zip, marker::PhantomData, sync::Mutex};
+use std::{env, error::Error, iter::zip, marker::PhantomData, sync::Mutex};
 
 // core implementations
+
+#[derive(Debug)]
+struct RedisError(String);
+impl RedisError {
+    pub fn data_not_enough<T>(ctx: &str) -> Result<T> {
+        Err(RedisError(format!("fetched data is not enough ({})", ctx)).into())
+    }
+}
+impl Error for RedisError {}
+impl std::fmt::Display for RedisError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "error occurred in `redis` module: {}", self.0)
+    }
+}
 
 pub const REDIS_KEY_NBYTES: usize = 256;
 pub type RedisKey = PyFixedString<REDIS_KEY_NBYTES>;
@@ -106,7 +120,7 @@ impl<T: AFloat> RedisClient<T> {
         }
     }
 
-    pub fn fetch(&self, key: &str, start: isize, end: isize) -> RedisResult<Array1<T>> {
+    pub fn fetch(&self, key: &str, start: isize, end: isize) -> Result<Array1<T>> {
         if !self.warmed_up {
             panic!("should call `reset` before `fetch`");
         }
@@ -128,6 +142,16 @@ impl<T: AFloat> RedisClient<T> {
                         conn.getrange(key, start, end)?
                     }
                 };
+                if rv.len() != (end - start + 1) as usize {
+                    return RedisError::data_not_enough(&format!(
+                        "key: {}, start: {}, end: {}; fetched: {}, expected: {}",
+                        key,
+                        start,
+                        end,
+                        rv.len(),
+                        end - start + 1
+                    ));
+                }
                 Ok(Array1::from(unsafe { from_bytes(rv) }))
             }
         }
@@ -138,9 +162,12 @@ impl<T: AFloat> RedisClient<T> {
         key: &str,
         start_indices: Vec<isize>,
         end_indices: Vec<isize>,
-    ) -> RedisResult<Vec<Array1<T>>> {
+    ) -> Result<Vec<Array1<T>>> {
         if !self.warmed_up {
             panic!("should call `reset` before `batch_fetch`");
+        }
+        if start_indices.len() != end_indices.len() {
+            panic!("`start_indices` & `end_indices` should have the same length");
         }
         match &self.conn_pool {
             None => panic!("should call `reset` before `batch_fetch`"),
@@ -156,7 +183,7 @@ impl<T: AFloat> RedisClient<T> {
                         return results
                     "#,
                 );
-                let ranges_str: Vec<String> = zip(start_indices, end_indices)
+                let ranges_str: Vec<String> = zip(&start_indices, &end_indices)
                     .map(|(start, end)| format!("{}-{}", start, end))
                     .collect();
                 let rv: Vec<Vec<u8>> = {
@@ -175,6 +202,26 @@ impl<T: AFloat> RedisClient<T> {
                         script.key(key).arg(ranges_str).invoke(&mut *conn)?
                     }
                 };
+                if rv.len() != start_indices.len() {
+                    return RedisError::data_not_enough(&format!(
+                        "key: {}, fetched (outer): {}, expected (outer): {}",
+                        key,
+                        rv.len(),
+                        start_indices.len()
+                    ));
+                }
+                for (i, i_rv) in rv.iter().enumerate() {
+                    if i_rv.len() != (end_indices[i] - start_indices[i] + 1) as usize {
+                        return RedisError::data_not_enough(&format!(
+                            "key: {}, start: {}, end: {}; fetched (inner): {}, expected (inner): {}",
+                            key,
+                            start_indices[i],
+                            end_indices[i],
+                            i_rv.len(),
+                            end_indices[i] - start_indices[i] + 1
+                        ));
+                    }
+                }
                 Ok(rv
                     .into_iter()
                     .map(|bytes| unsafe { from_bytes(bytes) })
