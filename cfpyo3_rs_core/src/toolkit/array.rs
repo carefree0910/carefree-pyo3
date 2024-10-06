@@ -4,7 +4,6 @@ use num_traits::{Float, FromPrimitive};
 use numpy::ndarray::{ArrayView1, ArrayView2, Axis, ScalarOperand};
 use std::{
     cell::UnsafeCell,
-    error::Error,
     fmt::{Debug, Display},
     iter::zip,
     mem,
@@ -23,7 +22,7 @@ impl ArrayError {
         Err(ArrayError::new("data is not contiguous").into())
     }
 }
-impl Error for ArrayError {}
+impl std::error::Error for ArrayError {}
 impl std::fmt::Display for ArrayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "error occurred in `array` module: {}", self.0)

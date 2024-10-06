@@ -14,7 +14,7 @@ use redis::{
     cluster::{ClusterClient, ClusterClientBuilder, ClusterConnection},
     Commands, Script,
 };
-use std::{env, error::Error, iter::zip, marker::PhantomData, sync::Mutex};
+use std::{env, iter::zip, marker::PhantomData, sync::Mutex};
 
 // core implementations
 
@@ -25,7 +25,7 @@ impl RedisError {
         Err(RedisError(format!("fetched data is not enough ({})", ctx)).into())
     }
 }
-impl Error for RedisError {}
+impl std::error::Error for RedisError {}
 impl std::fmt::Display for RedisError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "error occurred in `redis` module: {}", self.0)

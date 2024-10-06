@@ -35,7 +35,6 @@ use redis::{RedisClient, RedisFetcher, RedisGroupedFetcher, RedisKey};
 use shm::{SHMFetcher, SlicedSHMFetcher};
 use std::{
     collections::HashMap,
-    error::Error,
     future::Future,
     iter::zip,
     sync::{mpsc::channel, Arc, Mutex},
@@ -60,7 +59,7 @@ impl MemError {
         Err(MemError::new("`data_getter` is not returning contiguous data").into())
     }
 }
-impl Error for MemError {}
+impl std::error::Error for MemError {}
 impl std::fmt::Display for MemError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "error occurred in `mem` module: {}", self.0)
