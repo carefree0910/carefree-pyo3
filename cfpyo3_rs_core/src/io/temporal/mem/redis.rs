@@ -5,7 +5,7 @@ use crate::toolkit::{
     array::AFloat,
     convert::{from_bytes, to_nbytes},
 };
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use numpy::{
     ndarray::{Array1, ArrayView1, CowArray},
     Ix1, PyFixedString,
@@ -45,7 +45,7 @@ pub struct RedisClient<T: AFloat> {
     trackers: Trackers,
 }
 
-fn init_client(urls: Vec<String>) -> Mutex<ClusterClient> {
+fn init_client(urls: Vec<String>) -> Result<Mutex<ClusterClient>> {
     let username = env::var("REDIS_USER").unwrap_or("default".to_string());
     let password = env::var("REDIS_PASSWORD").unwrap_or("".to_string());
     let connection_timeout = env::var("REDIS_CONNECTION_TIMEOUT")
@@ -53,14 +53,12 @@ fn init_client(urls: Vec<String>) -> Mutex<ClusterClient> {
         .parse::<u64>()
         .expect("failed to parse REDIS_CONNECTION_TIMEOUT from env");
     let connection_timeout = std::time::Duration::from_secs(connection_timeout);
-    Mutex::new(
-        ClusterClientBuilder::new(urls.clone())
-            .username(username)
-            .password(password)
-            .connection_timeout(connection_timeout)
-            .build()
-            .unwrap_or_else(|_| panic!("failed to connect to redis cluster at '{:?}'", urls)),
-    )
+    let client = ClusterClientBuilder::new(urls.clone())
+        .username(username)
+        .password(password)
+        .connection_timeout(connection_timeout)
+        .build()?;
+    Ok(Mutex::new(client))
 }
 
 fn roll_pool_idx(cursor: &Mutex<Cursor>, pool: &[Option<Mutex<ClusterConnection>>]) -> usize {
@@ -90,9 +88,9 @@ impl<T: AFloat> RedisClient<T> {
         }
     }
 
-    pub fn reset(&mut self, urls: Vec<String>, pool_size: usize, reconnect: bool) {
+    pub fn reset(&mut self, urls: Vec<String>, pool_size: usize, reconnect: bool) -> Result<()> {
         if reconnect || self.cluster.is_none() {
-            self.cluster = Some(init_client(urls));
+            self.cluster = Some(init_client(urls)?);
         }
         if reconnect || self.conn_pool.is_none() {
             self.conn_pool = Some((0..pool_size).map(|_| None).collect::<Vec<_>>());
@@ -102,22 +100,32 @@ impl<T: AFloat> RedisClient<T> {
             }
             match (&mut self.cluster, &mut self.conn_pool) {
                 (Some(cluster), Some(pool)) => {
-                    pool.iter_mut().for_each(|conn| {
+                    pool.iter_mut().try_for_each(|conn| {
                         if conn.is_none() {
                             let new_conn = cluster.get_mut().unwrap().get_connection();
                             match new_conn {
                                 Ok(new_conn) => {
                                     *conn = Some(Mutex::new(new_conn));
                                 }
-                                Err(_) => panic!("failed to execute `get_connection` from cluster"),
+                                Err(err) => {
+                                    return Err(err).with_context(|| {
+                                        "failed to execute `get_connection` from cluster"
+                                    });
+                                }
                             }
                         }
-                    });
+                        Ok(())
+                    })?;
                     self.warmed_up = true;
                 }
-                _ => panic!("internal error: `cluster` or `conn_pool` is `None`"),
+                _ => {
+                    return Err(anyhow!(
+                        "internal error: `cluster` or `conn_pool` is `None`"
+                    ));
+                }
             }
         }
+        Ok(())
     }
 
     pub fn fetch(&self, key: &str, start: isize, end: isize) -> Result<Array1<T>> {
