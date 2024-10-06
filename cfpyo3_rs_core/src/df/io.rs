@@ -1,7 +1,10 @@
 use super::{ColumnsDtype, DataFrame, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES};
-use crate::toolkit::{
-    array::AFloat,
-    convert::{from_bytes, to_bytes, to_nbytes},
+use crate::{
+    as_data_slice_or_err,
+    toolkit::{
+        array::AFloat,
+        convert::{from_bytes, to_bytes, to_nbytes},
+    },
 };
 use anyhow::Result;
 use std::io::{Read, Write};
@@ -45,9 +48,9 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         writer.write_all(&index_nbytes.to_le_bytes())?;
         writer.write_all(&columns_nbytes.to_le_bytes())?;
         unsafe {
-            writer.write_all(to_bytes(index.as_slice().unwrap()))?;
-            writer.write_all(to_bytes(columns.as_slice().unwrap()))?;
-            writer.write_all(to_bytes(self.values.as_slice().unwrap()))?;
+            writer.write_all(to_bytes(as_data_slice_or_err!(index)))?;
+            writer.write_all(to_bytes(as_data_slice_or_err!(columns)))?;
+            writer.write_all(to_bytes(as_data_slice_or_err!(self.values)))?;
         }
         Ok(())
     }

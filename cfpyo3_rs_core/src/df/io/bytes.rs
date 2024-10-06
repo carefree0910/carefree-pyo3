@@ -1,4 +1,5 @@
 use crate::{
+    as_data_slice_or_err,
     df::{
         meta::{align_nbytes, DF_ALIGN},
         ColumnsDtype, DataFrame, IndexDtype, COLUMNS_NBYTES, INDEX_NBYTES,
@@ -8,13 +9,14 @@ use crate::{
         convert::{to_bytes, to_nbytes},
     },
 };
+use anyhow::Result;
 use bytes::BufMut;
 use core::mem;
 
-fn extract_usize(bytes: &[u8]) -> (&[u8], usize) {
+fn extract_usize(bytes: &[u8]) -> Result<(&[u8], usize)> {
     let (target, remain) = bytes.split_at(to_nbytes::<i64>(1));
-    let value = i64::from_le_bytes(target.try_into().unwrap());
-    (remain, value as usize)
+    let value = i64::from_le_bytes(target.try_into()?);
+    Ok((remain, value as usize))
 }
 fn extract_ptr(bytes: &[u8], nbytes: usize) -> (&[u8], *const u8) {
     let (target, remain) = bytes.split_at(nbytes);
@@ -31,7 +33,7 @@ fn put_aligned_slice(bytes: &mut Vec<u8>, slice: &[u8]) {
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let index = &self.index;
         let columns = &self.columns;
         let values = &self.values;
@@ -54,11 +56,11 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         bytes.put_i64_le(index_nbytes as i64);
         bytes.put_i64_le(columns_nbytes as i64);
         unsafe {
-            put_aligned_slice(&mut bytes, to_bytes(index.as_slice().unwrap()));
-            put_aligned_slice(&mut bytes, to_bytes(columns.as_slice().unwrap()));
-            put_aligned_slice(&mut bytes, to_bytes(values.as_slice().unwrap()));
+            put_aligned_slice(&mut bytes, to_bytes(as_data_slice_or_err!(index)));
+            put_aligned_slice(&mut bytes, to_bytes(as_data_slice_or_err!(columns)));
+            put_aligned_slice(&mut bytes, to_bytes(as_data_slice_or_err!(values)));
         };
-        bytes
+        Ok(bytes)
     }
 
     /// Create a [`DataFrame`] from a compact bytes slice, which is usually created by the [`DataFrame::to_bytes`] method.
@@ -70,9 +72,9 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     ///
     /// The safety concern only comes from whether the `bytes` is of the desired memory layout,
     /// the mutabilities are safe because we borrow the `bytes` immutably and specify the lifetime.
-    pub unsafe fn from_bytes(bytes: &'a [u8]) -> Self {
-        let (bytes, index_nbytes) = extract_usize(bytes);
-        let (bytes, columns_nbytes) = extract_usize(bytes);
+    pub unsafe fn from_bytes(bytes: &'a [u8]) -> Result<Self> {
+        let (bytes, index_nbytes) = extract_usize(bytes)?;
+        let (bytes, columns_nbytes) = extract_usize(bytes)?;
 
         let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
@@ -82,13 +84,13 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
         let (_, values_ptr) = extract_ptr(bytes, values_nbytes);
 
-        DataFrame::from_ptr(
+        Ok(DataFrame::from_ptr(
             index_ptr,
             index_shape,
             columns_ptr,
             columns_shape,
             values_ptr,
-        )
+        ))
     }
 }
 
@@ -115,7 +117,7 @@ pub(super) mod tests {
     #[test]
     fn test_bytes_io() {
         let df = get_test_df();
-        let bytes = df.to_bytes();
+        let bytes = df.to_bytes().unwrap();
         #[rustfmt::skip]
         {
             assert_eq!(
@@ -129,7 +131,7 @@ pub(super) mod tests {
                 ]
             );
         };
-        let loaded = unsafe { DataFrame::<f32>::from_bytes(&bytes) };
+        let loaded = unsafe { DataFrame::<f32>::from_bytes(&bytes).unwrap() };
         assert_eq!(df.index, loaded.index);
         assert_eq!(df.columns, loaded.columns);
         assert_eq!(df.values, loaded.values);

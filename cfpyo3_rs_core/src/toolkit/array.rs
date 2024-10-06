@@ -1,8 +1,10 @@
+use anyhow::Result;
 use itertools::{enumerate, izip};
 use num_traits::{Float, FromPrimitive};
 use numpy::ndarray::{ArrayView1, ArrayView2, Axis, ScalarOperand};
 use std::{
     cell::UnsafeCell,
+    error::Error,
     fmt::{Debug, Display},
     iter::zip,
     mem,
@@ -10,6 +12,33 @@ use std::{
     ptr,
     thread::available_parallelism,
 };
+
+#[derive(Debug)]
+pub struct ArrayError(String);
+impl ArrayError {
+    fn new(msg: &str) -> Self {
+        Self(msg.to_string())
+    }
+    pub fn data_not_contiguous<T>() -> Result<T> {
+        Err(ArrayError::new("data is not contiguous").into())
+    }
+}
+impl Error for ArrayError {}
+impl std::fmt::Display for ArrayError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "error occurred in `array` module: {}", self.0)
+    }
+}
+
+#[macro_export]
+macro_rules! as_data_slice_or_err {
+    ($data:expr) => {
+        match $data.as_slice() {
+            Some(data) => data,
+            None => return $crate::toolkit::array::ArrayError::data_not_contiguous(),
+        }
+    };
+}
 
 #[derive(Copy, Clone)]
 pub struct UnsafeSlice<'a, T> {

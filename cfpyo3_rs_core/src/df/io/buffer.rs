@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn test_buffer_io() {
         let df = get_test_df();
-        let bytes = df.to_bytes();
+        let bytes = df.to_bytes().unwrap();
         let loaded = DataFrame::<f32>::from_buffer(bytes.as_slice()).unwrap();
         assert_eq!(df.index, loaded.index);
         assert_eq!(df.columns, loaded.columns);
