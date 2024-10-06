@@ -173,7 +173,7 @@ fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
 ///
 /// this function is not very practical to use, so we are neither utilizing the `fetcher` module
 /// nor the `ColumnIndicesGetter` trait for simplicity.
-pub fn row_contiguous<'a, T, F0, F1>(
+pub fn row_contiguous<'a, T>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
@@ -182,14 +182,12 @@ pub fn row_contiguous<'a, T, F0, F1>(
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
     date_columns_offset: &ArrayView1<i64>,
-    columns_getter: F0,
-    data_getter: F1,
+    columns_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
+    data_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, T>,
     flattened: &mut [T],
 ) -> Result<()>
 where
     T: AFloat,
-    F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
-    F1: Fn(i64, i64) -> ArrayView1<'a, T>,
 {
     use anyhow::Ok;
 
@@ -420,7 +418,7 @@ impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
 ///   the possibility of fetching more contiguous data at once. in this case, we need to know the
 ///   multiplier to correctly fill the `flattened` array.
 /// - `offsets` - the offsets for each data item, see documentation for `Offsets`.
-pub fn column_contiguous<'a, T, F0, F1, F2>(
+pub fn column_contiguous<'a, T>(
     c: Option<usize>,
     datetime_start: i64,
     datetime_end: i64,
@@ -430,18 +428,15 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
     full_index: &ArrayView1<i64>,
     time_idx_to_date_idx: &ArrayView1<i64>,
     date_columns_offset: &ArrayView1<i64>,
-    columns_getter: F0,
-    columns_indices_getter: F1,
-    data_getter: F2,
+    columns_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
+    columns_indices_getter: &dyn ColumnIndicesGetter,
+    data_getter: &dyn Fetcher<T>,
     flattened: &mut UnsafeSlice<T>,
     multiplier: Option<i64>,
     offsets: Option<Offsets>,
 ) -> Result<()>
 where
     T: AFloat,
-    F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
-    F1: ColumnIndicesGetter,
-    F2: Fetcher<T>,
 {
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
@@ -584,7 +579,7 @@ where
 }
 
 /// an async version of `column_contiguous`.
-pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
+pub async fn async_column_contiguous<'a, T, F>(
     c: Option<usize>,
     datetime_start: i64,
     datetime_end: i64,
@@ -594,18 +589,16 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
     full_index: &ArrayView1<'_, i64>,
     time_idx_to_date_idx: &ArrayView1<'_, i64>,
     date_columns_offset: &ArrayView1<'_, i64>,
-    columns_getter: F0,
-    columns_indices_getter: F1,
-    data_getter: F2,
+    columns_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
+    columns_indices_getter: &dyn ColumnIndicesGetter,
+    data_getter: F,
     mut flattened: UnsafeSlice<'_, T>,
     multiplier: Option<i64>,
     offsets: Option<Offsets>,
 ) -> Result<()>
 where
     T: AFloat,
-    F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
-    F1: ColumnIndicesGetter,
-    F2: AsyncFetcher<T>,
+    F: AsyncFetcher<T>,
 {
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
@@ -783,8 +776,8 @@ pub fn shm_row_contiguous<T: AFloat>(
         full_index,
         time_idx_to_date_idx,
         date_columns_offset,
-        |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
-        |start_idx, end_idx| compact_data.slice(s![start_idx as isize..end_idx as isize]),
+        &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        &|start_idx, end_idx| compact_data.slice(s![start_idx as isize..end_idx as isize]),
         flattened_slice,
     )?;
     Ok(flattened)
@@ -835,9 +828,9 @@ pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
         full_index,
         time_idx_to_date_idx,
         date_columns_offset,
-        |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
-        CachedGetter::new(columns.view()),
-        SHMFetcher::new(compact_data),
+        &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        &CachedGetter::new(columns.view()),
+        &SHMFetcher::new(compact_data),
         &mut UnsafeSlice::new(flattened_slice),
         None,
         None,
@@ -904,9 +897,9 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                                 full_index,
                                 time_idx_to_date_idx,
                                 date_columns_offset,
-                                columns_getter,
-                                columns_indices_getter,
-                                data_getter,
+                                &columns_getter,
+                                &columns_indices_getter,
+                                &data_getter,
                                 &mut flattened_slice.slice(offset, offset + num_data_per_task),
                                 None,
                                 None,
@@ -967,9 +960,9 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
         full_index,
         time_idx_to_date_idx,
         date_columns_offset,
-        |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
-        CachedGetter::new(columns),
-        SlicedSHMFetcher::new(sliced_data, multiplier),
+        &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
+        &CachedGetter::new(columns),
+        &SlicedSHMFetcher::new(sliced_data, multiplier),
         &mut UnsafeSlice::new(flattened_slice),
         multiplier,
         None,
@@ -1033,9 +1026,9 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                             full_index,
                             time_idx_to_date_idx,
                             date_columns_offset,
-                            columns_getter,
-                            columns_indices_getter,
-                            data_getter,
+                            &columns_getter,
+                            &columns_indices_getter,
+                            &data_getter,
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
                             None,
@@ -1101,9 +1094,9 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                         full_index,
                         time_idx_to_date_idx,
                         date_columns_offset,
-                        columns_getter,
-                        columns_indices_getter,
-                        data_getter,
+                        &columns_getter,
+                        &columns_indices_getter,
+                        &data_getter,
                         &mut flattened_slice.slice(offset, offset + num_data_per_task),
                         multiplier,
                         None,
@@ -1173,9 +1166,9 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                             full_index,
                             time_idx_to_date_idx,
                             date_columns_offset,
-                            columns_getter,
-                            columns_indices_getter,
-                            RedisFetcher::new(redis_client, redis_keys),
+                            &columns_getter,
+                            &columns_indices_getter,
+                            &RedisFetcher::new(redis_client, redis_keys),
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
                             None,
@@ -1277,9 +1270,9 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
                             full_index,
                             time_idx_to_date_idx,
                             date_columns_offset,
-                            columns_getter,
-                            columns_indices_getter,
-                            RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
+                            &columns_getter,
+                            &columns_indices_getter,
+                            &RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
                             &mut flattened_slice.slice(offset, offset + num_data_per_batch),
                             Some(multiplier),
                             Some(Offsets {
