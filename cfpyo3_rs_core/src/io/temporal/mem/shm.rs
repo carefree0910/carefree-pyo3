@@ -1,5 +1,6 @@
 use super::{Fetcher, FetcherArgs};
 use crate::toolkit::array::AFloat;
+use anyhow::Result;
 use numpy::{
     ndarray::{s, ArrayView1, CowArray},
     Ix1,
@@ -16,10 +17,11 @@ impl<'a, T: AFloat> SHMFetcher<'a, T> {
 }
 
 impl<'a, T: AFloat> Fetcher<T> for SHMFetcher<'a, T> {
-    fn fetch(&self, args: FetcherArgs) -> CowArray<T, Ix1> {
-        self.data
+    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
+        Ok(self
+            .data
             .slice(s![args.start_idx as isize..args.end_idx as isize])
-            .into()
+            .into())
     }
 }
 
@@ -41,7 +43,7 @@ impl<'a, T: AFloat> SlicedSHMFetcher<'a, T> {
 }
 
 impl<'a, T: AFloat> Fetcher<T> for SlicedSHMFetcher<'a, T> {
-    fn fetch(&self, args: FetcherArgs) -> CowArray<T, Ix1> {
+    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
         let data = self.data_slices[args.date_idx as usize];
         let mut start_idx = args.time_start_idx;
         let mut end_idx = args.time_end_idx;
@@ -49,6 +51,6 @@ impl<'a, T: AFloat> Fetcher<T> for SlicedSHMFetcher<'a, T> {
             start_idx *= multiplier;
             end_idx *= multiplier;
         }
-        data.slice(s![start_idx as isize..end_idx as isize]).into()
+        Ok(data.slice(s![start_idx as isize..end_idx as isize]).into())
     }
 }

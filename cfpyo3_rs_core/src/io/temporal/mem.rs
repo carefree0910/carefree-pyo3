@@ -25,6 +25,7 @@ use crate::{
     df::ColumnsDtype,
     toolkit::array::{batch_searchsorted, searchsorted, AFloat, UnsafeSlice},
 };
+use anyhow::Result;
 use numpy::{
     ndarray::{s, Array1, ArrayView1, CowArray},
     Ix1,
@@ -34,9 +35,10 @@ use redis::{RedisClient, RedisFetcher, RedisGroupedFetcher, RedisKey};
 use shm::{SHMFetcher, SlicedSHMFetcher};
 use std::{
     collections::HashMap,
+    error::Error,
     future::Future,
     iter::zip,
-    sync::{Arc, Mutex},
+    sync::{mpsc::channel, Arc, Mutex},
 };
 
 #[cfg(feature = "io-mem-redis")]
@@ -44,6 +46,35 @@ pub mod redis;
 pub mod shm;
 
 // core implementations
+
+#[derive(Debug)]
+struct MemError(String);
+impl MemError {
+    fn new(msg: &str) -> Self {
+        Self(msg.to_string())
+    }
+    fn datetime_index_not_continuous() -> Result<()> {
+        Err(MemError::new("`datetime_index` is not continuous").into())
+    }
+    fn data_getter_not_contiguous() -> Result<()> {
+        Err(MemError::new("`data_getter` is not returning contiguous data").into())
+    }
+}
+impl Error for MemError {}
+impl std::fmt::Display for MemError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "error occurred in `mem` module: {}", self.0)
+    }
+}
+
+macro_rules! as_data_slice_or_err {
+    ($data:expr) => {
+        match $data.as_slice() {
+            Some(data) => data,
+            None => return MemError::data_getter_not_contiguous(),
+        }
+    };
+}
 
 /// arguments for the `Fetcher::fetch` method
 ///
@@ -84,20 +115,21 @@ pub trait Fetcher<T: AFloat> {
     fn can_batch_fetch(&self) -> bool {
         false
     }
-    fn fetch(&self, args: FetcherArgs) -> CowArray<T, Ix1> {
+    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
         if self.can_batch_fetch() {
-            self.batch_fetch(vec![args]).pop().unwrap()
+            let mut rv = self.batch_fetch(vec![args])?;
+            rv.pop().ok_or(Err(MemError::new("empty result"))?)
         } else {
             unreachable!("should implement `fetch` when `can_batch_fetch` returns false");
         }
     }
-    fn batch_fetch(&self, _args: Vec<FetcherArgs>) -> Vec<CowArray<T, Ix1>> {
+    fn batch_fetch(&self, _args: Vec<FetcherArgs>) -> Result<Vec<CowArray<T, Ix1>>> {
         unreachable!("`batch_fetch` should be implemented when `can_batch_fetch` returns true");
     }
 }
 
 pub trait AsyncFetcher<T: AFloat> {
-    fn fetch(&self, args: FetcherArgs) -> impl Future<Output = CowArray<T, Ix1>>;
+    fn fetch(&self, args: FetcherArgs) -> impl Future<Output = Result<CowArray<T, Ix1>>>;
 }
 
 fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
@@ -154,15 +186,18 @@ pub fn row_contiguous<'a, T, F0, F1>(
     columns_getter: F0,
     data_getter: F1,
     flattened: &mut [T],
-) where
+) -> Result<()>
+where
     T: AFloat,
     F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
     F1: Fn(i64, i64) -> ArrayView1<'a, T>,
 {
+    use anyhow::Ok;
+
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
     if full_index[time_end_idx] != datetime_end {
-        panic!("`datetime_index` is not continuous")
+        MemError::datetime_index_not_continuous()
     } else {
         let date_idxs =
             time_idx_to_date_idx.slice(s![time_start_idx as isize..=time_end_idx as isize]);
@@ -196,43 +231,43 @@ pub fn row_contiguous<'a, T, F0, F1>(
 
         let mut cursor: i64 = 0;
         let mut time_idx: i64 = 0;
-        zip(date_counts, columns_per_day)
-            .map(|(date_count, date_columns)| {
-                let columns_len = date_columns.len();
-                let cursor_end = cursor + date_count * columns_len as i64;
-                let time_idx_end = time_idx + date_count;
-                let columns_idx = batch_searchsorted(&date_columns.view(), columns);
-                let mut corrected_columns_idx = columns_idx.clone();
-                columns_idx.iter().enumerate().for_each(|(i, &column_idx)| {
-                    if column_idx >= columns_len {
-                        corrected_columns_idx[i] = 0;
+        zip(date_counts, columns_per_day).try_for_each(|(date_count, date_columns)| {
+            let columns_len = date_columns.len();
+            let cursor_end = cursor + date_count * columns_len as i64;
+            let time_idx_end = time_idx + date_count;
+            let columns_idx = batch_searchsorted(&date_columns.view(), columns);
+            let mut corrected_columns_idx = columns_idx.clone();
+            columns_idx.iter().enumerate().for_each(|(i, &column_idx)| {
+                if column_idx >= columns_len {
+                    corrected_columns_idx[i] = 0;
+                }
+            });
+            let selected_data = data_getter(start_idx + cursor, start_idx + cursor_end)
+                .into_shape((date_count as usize, columns_len))?;
+            let selected_data = selected_data.t();
+            zip(corrected_columns_idx, columns_idx)
+                .enumerate()
+                .try_for_each(|(i, (corrected_idx, idx))| {
+                    if date_columns[corrected_idx] == columns[i] {
+                        let i_selected_data = selected_data.row(idx);
+                        fill_data(time_idx, i, i_selected_data, flattened, num_columns)
+                    } else {
+                        let nan_data = vec![T::nan(); date_count as usize];
+                        fill_data(
+                            time_idx,
+                            i,
+                            ArrayView1::from_shape(date_count as usize, &nan_data)?,
+                            flattened,
+                            num_columns,
+                        )
                     }
-                });
-                let selected_data = data_getter(start_idx + cursor, start_idx + cursor_end)
-                    .into_shape((date_count as usize, columns_len))
-                    .unwrap();
-                let selected_data = selected_data.t();
-                zip(corrected_columns_idx, columns_idx)
-                    .enumerate()
-                    .for_each(|(i, (corrected_idx, idx))| {
-                        if date_columns[corrected_idx] == columns[i] {
-                            let i_selected_data = selected_data.row(idx);
-                            fill_data(time_idx, i, i_selected_data, flattened, num_columns)
-                        } else {
-                            let nan_data = vec![T::nan(); date_count as usize];
-                            fill_data(
-                                time_idx,
-                                i,
-                                ArrayView1::from_shape(date_count as usize, &nan_data).unwrap(),
-                                flattened,
-                                num_columns,
-                            )
-                        }
-                    });
-                cursor = cursor_end;
-                time_idx = time_idx_end;
-            })
-            .for_each(drop);
+                    Ok(())
+                })?;
+            cursor = cursor_end;
+            time_idx = time_idx_end;
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 
@@ -402,7 +437,8 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
     flattened: &mut UnsafeSlice<T>,
     multiplier: Option<i64>,
     offsets: Option<Offsets>,
-) where
+) -> Result<()>
+where
     T: AFloat,
     F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
     F1: ColumnIndicesGetter,
@@ -411,7 +447,7 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
     if full_index[time_end_idx] != datetime_end {
-        panic!("`datetime_index` is not continuous")
+        MemError::datetime_index_not_continuous()
     } else {
         let start_date_idx = time_idx_to_date_idx[time_start_idx];
         let end_date_idx = time_idx_to_date_idx[time_end_idx];
@@ -465,7 +501,7 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
         columns_per_day
             .iter()
             .enumerate()
-            .for_each(|(i, date_columns)| {
+            .try_for_each(|(i, date_columns)| -> Result<()> {
                 let i_offset = num_ticks_per_day * columns_offset;
                 let i_start_idx = start_idx + i_offset;
                 let i_time_start_idx = if i == 0 {
@@ -490,8 +526,9 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
                 });
                 let mut tasks = Vec::new();
                 let mut f_start_indices = Vec::new();
-                zip(i_corrected_rows_idx, i_rows_idx).enumerate().for_each(
-                    |(j, (corrected_idx, idx))| {
+                zip(i_corrected_rows_idx, i_rows_idx)
+                    .enumerate()
+                    .try_for_each(|(j, (corrected_idx, idx))| -> Result<()> {
                         let date_start_idx = i_start_idx + idx as i64 * num_ticks_per_day;
                         let mut f_start_idx =
                             (j as i64 + column_offset) * datetime_len + i_time_offset;
@@ -518,8 +555,9 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
                                 tasks.push(args);
                                 f_start_indices.push(f_start_idx);
                             } else {
-                                let data = data_getter.fetch(args);
-                                fill_data(f_start_idx, data.as_slice().unwrap());
+                                let data = data_getter.fetch(args)?;
+                                let data = as_data_slice_or_err!(data);
+                                fill_data(f_start_idx, data);
                             }
                         } else {
                             let mut nan_len = i_time_end_idx - i_time_start_idx;
@@ -528,17 +566,21 @@ pub fn column_contiguous<'a, T, F0, F1, F2>(
                             }
                             fill_data(f_start_idx, vec![T::nan(); nan_len as usize].as_slice());
                         }
-                    },
-                );
+                        Ok(())
+                    })?;
                 if !tasks.is_empty() {
-                    let batch_data = data_getter.batch_fetch(tasks);
-                    zip(batch_data, f_start_indices).for_each(|(data, f_start_idx)| {
-                        fill_data(f_start_idx, data.as_slice().unwrap());
-                    });
+                    let batch_data = data_getter.batch_fetch(tasks)?;
+                    zip(batch_data, f_start_indices).try_for_each(|(data, f_start_idx)| {
+                        let data = as_data_slice_or_err!(data);
+                        fill_data(f_start_idx, data);
+                        Ok(())
+                    })?;
                 }
                 i_time_offset = i_time_offset + i_time_end_idx - i_time_start_idx;
                 columns_offset += num_columns_per_day[i] as i64;
-            });
+                Ok(())
+            })?;
+        Ok(())
     }
 }
 
@@ -559,7 +601,8 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
     mut flattened: UnsafeSlice<'_, T>,
     multiplier: Option<i64>,
     offsets: Option<Offsets>,
-) where
+) -> Result<()>
+where
     T: AFloat,
     F0: Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
     F1: ColumnIndicesGetter,
@@ -568,7 +611,7 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
     let time_start_idx = searchsorted(full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
     if full_index[time_end_idx] != datetime_end {
-        panic!("`datetime_index` is not continuous")
+        MemError::datetime_index_not_continuous()
     } else {
         let start_date_idx = time_idx_to_date_idx[time_start_idx];
         let end_date_idx = time_idx_to_date_idx[time_end_idx];
@@ -685,10 +728,13 @@ pub async fn async_column_contiguous<'a, T, F0, F1, F2>(
                 columns_offset += num_columns_per_day[i] as i64;
             });
         let futures = tasks.into_iter().map(|args| data_getter.fetch(args));
-        let batch_data = futures::future::join_all(futures).await;
-        zip(batch_data, f_start_indices).for_each(|(data, f_start_idx)| {
-            fill_data(f_start_idx, data.as_slice().unwrap());
-        });
+        let batch_data = futures::future::try_join_all(futures).await?;
+        zip(batch_data, f_start_indices).try_for_each(|(data, f_start_idx)| {
+            let data = as_data_slice_or_err!(data);
+            fill_data(f_start_idx, data);
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 
@@ -726,7 +772,7 @@ pub fn shm_row_contiguous<T: AFloat>(
     date_columns_offset: &ArrayView1<i64>,
     compact_columns: &ArrayView1<ColumnsDtype>,
     compact_data: &ArrayView1<T>,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
     let flattened_slice = flattened.as_mut_slice();
     row_contiguous(
@@ -741,8 +787,8 @@ pub fn shm_row_contiguous<T: AFloat>(
         |start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
         |start_idx, end_idx| compact_data.slice(s![start_idx as isize..end_idx as isize]),
         flattened_slice,
-    );
-    flattened
+    )?;
+    Ok(flattened)
 }
 
 /// random-fetching temporal data with column contiguous compact data & compact columns.
@@ -777,7 +823,7 @@ pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
     date_columns_offset: &ArrayView1<i64>,
     compact_columns: &ArrayView1<ColumnsDtype>,
     compact_data: &'a ArrayView1<'a, T>,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
     let flattened_slice = flattened.as_mut_slice();
     column_contiguous(
@@ -796,8 +842,8 @@ pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
         &mut UnsafeSlice::new(flattened_slice),
         None,
         None,
-    );
-    flattened
+    )?;
+    Ok(flattened)
 }
 
 /// a batched version of `shm_column_contiguous`.
@@ -813,7 +859,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     compact_columns: &[&ArrayView1<ColumnsDtype>],
     compact_data: &[&'a ArrayView1<'a, T>],
     num_threads: usize,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let nc = compact_data.len();
     let num_data_per_task = datetime_len as usize * columns[0].len();
     let num_tasks = datetime_start.len() * nc;
@@ -823,9 +869,9 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build()
-        .unwrap();
+        .build()?;
     pool.scope(move |s| {
+        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         compact_data
             .iter()
@@ -846,9 +892,10 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                         let columns = columns[i];
                         let offset = (i * nc + c) * num_data_per_task;
                         let columns_indices_getter = columns_indices_getters[i].clone();
+                        let i_sender = sender.clone();
                         s.spawn(move |_| {
                             let data_getter = SHMFetcher::new(compact_data);
-                            column_contiguous(
+                            let rv = column_contiguous(
                                 Some(c),
                                 datetime_start,
                                 datetime_end,
@@ -865,11 +912,13 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                                 None,
                                 None,
                             );
+                            i_sender.send(rv).unwrap();
                         });
                     })
             });
-    });
-    flattened
+        receiver.iter().try_for_each(|x| x)
+    })?;
+    Ok(flattened)
 }
 
 /// random-fetching time-series data with column contiguous sliced data & compact columns.
@@ -905,7 +954,7 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
     compact_columns: &ArrayView1<ColumnsDtype>,
     sliced_data: &'a [&'a ArrayView1<'a, T>],
     multiplier: Option<i64>,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let mut flattened =
         vec![T::zero(); datetime_len as usize * columns.len() * multiplier.unwrap_or(1) as usize];
     let flattened_slice = flattened.as_mut_slice();
@@ -925,8 +974,8 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
         &mut UnsafeSlice::new(flattened_slice),
         multiplier,
         None,
-    );
-    flattened
+    )?;
+    Ok(flattened)
 }
 
 /// a batched version of `shm_sliced_column_contiguous`.
@@ -942,7 +991,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     compact_columns: &[&ArrayView1<ColumnsDtype>],
     sliced_data: &'a [&[&'a ArrayView1<'a, T>]],
     num_threads: usize,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let nc = sliced_data.len();
     let num_data_per_task = datetime_len as usize * columns[0].len();
     let num_tasks = datetime_start.len() * nc;
@@ -952,9 +1001,9 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build()
-        .unwrap();
+        .build()?;
     pool.scope(move |s| {
+        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         sliced_data.iter().enumerate().for_each(|(c, sliced_data)| {
             let full_index = full_index[c];
@@ -972,9 +1021,10 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                     let columns = columns[i];
                     let offset = (i * nc + c) * num_data_per_task;
                     let columns_indices_getter = columns_indices_getters[i].clone();
+                    let i_sender = sender.clone();
                     s.spawn(move |_| {
                         let data_getter = SlicedSHMFetcher::new(sliced_data, None);
-                        column_contiguous(
+                        let rv = column_contiguous(
                             Some(c),
                             datetime_start,
                             datetime_end,
@@ -991,11 +1041,13 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                             None,
                             None,
                         );
+                        i_sender.send(rv).unwrap();
                     });
                 })
         });
-    });
-    flattened
+        receiver.iter().try_for_each(|x| x)
+    })?;
+    Ok(flattened)
 }
 
 /// a batched & grouped version of `shm_sliced_column_contiguous`.
@@ -1012,7 +1064,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     sliced_data: &'a [&'a ArrayView1<'a, T>],
     num_threads: usize,
     num_groups: i64,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let num_data_per_task = columns[0].len() * datetime_len as usize * num_groups as usize;
     let num_tasks = datetime_start.len();
     let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
@@ -1022,9 +1074,9 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     let multiplier = Some(num_groups);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build()
-        .unwrap();
+        .build()?;
     pool.scope(move |s| {
+        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         let columns_getter = |start_idx: i64, end_idx: i64| {
             compact_columns.slice(s![start_idx as isize..end_idx as isize])
@@ -1037,9 +1089,10 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                 let columns = columns[i];
                 let offset = i * num_data_per_task;
                 let columns_indices_getter = columns_indices_getters[i].clone();
+                let i_sender = sender.clone();
                 s.spawn(move |_| {
                     let data_getter = SlicedSHMFetcher::new(sliced_data, multiplier);
-                    column_contiguous(
+                    let rv = column_contiguous(
                         None,
                         datetime_start,
                         datetime_end,
@@ -1056,10 +1109,12 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                         multiplier,
                         None,
                     );
+                    i_sender.send(rv).unwrap();
                 });
-            })
-    });
-    flattened
+            });
+        receiver.iter().try_for_each(|x| x)
+    })?;
+    Ok(flattened)
 }
 
 /// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
@@ -1077,7 +1132,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
     num_threads: usize,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let nc = redis_keys.len();
     let num_data_per_task = datetime_len as usize * columns[0].len();
     let num_tasks = datetime_start.len() * nc;
@@ -1087,9 +1142,9 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     let num_threads = num_threads.min(num_tasks);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build()
-        .unwrap();
+        .build()?;
     pool.scope(move |s| {
+        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         (0..nc).for_each(|c| {
             let full_index = full_index[c];
@@ -1107,8 +1162,9 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                     let columns = columns[i];
                     let offset = (i * nc + c) * num_data_per_task;
                     let columns_indices_getter = columns_indices_getters[i].clone();
+                    let i_sender = sender.clone();
                     s.spawn(move |_| {
-                        column_contiguous(
+                        let rv = column_contiguous(
                             Some(c),
                             datetime_start,
                             datetime_end,
@@ -1125,11 +1181,13 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                             None,
                             None,
                         );
+                        i_sender.send(rv).unwrap();
                     });
                 })
         });
-    });
-    flattened
+        receiver.iter().try_for_each(|x| x)
+    })?;
+    Ok(flattened)
 }
 
 /// a grouped version of `redis_column_contiguous`.
@@ -1148,7 +1206,7 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     redis_client: &'a RedisClient<T>,
     multipliers: &[i64],
     num_threads: usize,
-) -> Vec<T> {
+) -> Result<Vec<T>> {
     let bz = datetime_start.len();
     let nc = multipliers.iter().sum::<i64>();
     let n_groups = redis_keys.len();
@@ -1161,9 +1219,9 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     let num_threads = num_threads.min(bz * n_groups * num_columns_task);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build()
-        .unwrap();
+        .build()?;
     pool.scope(move |s: &rayon::Scope<'_>| {
+        let (sender, receiver) = channel();
         let flattened_slice = UnsafeSlice::new(flattened_slice);
         let num_total_columns_task = bz * num_columns_task;
         let mut columns_indices_getters = Vec::with_capacity(num_total_columns_task);
@@ -1207,8 +1265,9 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
                         (n + 1) * num_columns_per_task
                     };
                     let columns_indices_getter = columns_indices_getters[bn_index].clone();
+                    let i_sender = sender.clone();
                     s.spawn(move |_| {
-                        column_contiguous(
+                        let rv = column_contiguous(
                             None,
                             datetime_start,
                             datetime_end,
@@ -1229,13 +1288,15 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
                                 channel_pad_end,
                             }),
                         );
+                        i_sender.send(rv).unwrap();
                     });
                 }
             }
             channel_pad_start = next_pad_start;
         }
-    });
-    flattened
+        receiver.iter().try_for_each(|x| x)
+    })?;
+    Ok(flattened)
 }
 
 #[cfg(test)]
@@ -1301,7 +1362,8 @@ mod tests {
             &date_columns_offset.view(),
             &compact_columns.view(),
             &compact_data.view(),
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((6, 4), flattened).unwrap();
         assert_vec_eq(
             result,
@@ -1327,7 +1389,8 @@ mod tests {
             &date_columns_offset.view(),
             &compact_columns.view(),
             &compact_data.view(),
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((6, 4), flattened).unwrap();
         assert_vec_eq(
             result,
@@ -1353,7 +1416,8 @@ mod tests {
             &date_columns_offset.view(),
             &compact_columns.view(),
             &compact_data.view(),
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((6, 4), flattened).unwrap();
         assert_vec_eq(
             result,
@@ -1394,7 +1458,8 @@ mod tests {
             &date_columns_offset.view(),
             &compact_symbols.view(),
             &compact_data.view(),
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
             .unwrap()
             .t()
@@ -1423,7 +1488,8 @@ mod tests {
             &date_columns_offset.view(),
             &compact_symbols.view(),
             &compact_data.view(),
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
             .unwrap()
             .t()
@@ -1452,7 +1518,8 @@ mod tests {
             &date_columns_offset.view(),
             &compact_symbols.view(),
             &compact_data.view(),
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
             .unwrap()
             .t()
@@ -1508,7 +1575,8 @@ mod tests {
             &compact_symbols,
             &sliced_data,
             None,
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
             .unwrap()
             .t()
@@ -1538,7 +1606,8 @@ mod tests {
             &compact_symbols,
             &sliced_data,
             None,
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
             .unwrap()
             .t()
@@ -1568,7 +1637,8 @@ mod tests {
             &compact_symbols,
             &sliced_data,
             None,
-        );
+        )
+        .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
             .unwrap()
             .t()

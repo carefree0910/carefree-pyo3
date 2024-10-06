@@ -5,6 +5,7 @@ use crate::toolkit::{
     array::AFloat,
     convert::{from_bytes, to_nbytes},
 };
+use anyhow::Result;
 use numpy::{
     ndarray::{Array1, ArrayView1, CowArray},
     Ix1, PyFixedString,
@@ -221,7 +222,7 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
         true
     }
 
-    fn batch_fetch(&self, args: Vec<FetcherArgs>) -> Vec<CowArray<T, Ix1>> {
+    fn batch_fetch(&self, args: Vec<FetcherArgs>) -> Result<Vec<CowArray<T, Ix1>>> {
         let c = args[0]
             .c
             .expect("`c` should not be `None` in RedisFetcher::batch_fetch");
@@ -233,9 +234,7 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
             panic!("`c` & `date_idx` should be the same in RedisFetcher::batch_fetch");
         }
         let key = self.redis_keys[c][date_idx as usize];
-        let key = std::str::from_utf8(&key.0)
-            .unwrap()
-            .trim_end_matches(char::from(0));
+        let key = std::str::from_utf8(&key.0)?.trim_end_matches(char::from(0));
         let args_len = args.len();
         let mut start_indices = Vec::with_capacity(args_len);
         let mut end_indices = Vec::with_capacity(args_len);
@@ -244,10 +243,9 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
             end_indices.push(to_nbytes::<T>(arg.time_end_idx as usize) as isize);
         }
         self.client
-            .batch_fetch(key, start_indices, end_indices)
-            .unwrap()
+            .batch_fetch(key, start_indices, end_indices)?
             .into_iter()
-            .map(|array| array.into())
+            .map(|array| Ok(array.into()))
             .collect()
     }
 }
@@ -279,16 +277,11 @@ impl<'a, T: AFloat> RedisGroupedFetcher<'a, T> {
 }
 
 impl<'a, T: AFloat> Fetcher<T> for RedisGroupedFetcher<'a, T> {
-    fn fetch(&self, args: FetcherArgs) -> CowArray<T, Ix1> {
+    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
         let key = self.redis_keys[args.date_idx as usize];
-        let key = std::str::from_utf8(&key.0)
-            .unwrap()
-            .trim_end_matches(char::from(0));
+        let key = std::str::from_utf8(&key.0)?.trim_end_matches(char::from(0));
         let start = to_nbytes::<T>(args.time_start_idx as usize) * self.multiplier as usize;
         let end = to_nbytes::<T>(args.time_end_idx as usize) * self.multiplier as usize;
-        self.client
-            .fetch(key, start as isize, end as isize)
-            .unwrap()
-            .into()
+        Ok(self.client.fetch(key, start as isize, end as isize)?.into())
     }
 }
