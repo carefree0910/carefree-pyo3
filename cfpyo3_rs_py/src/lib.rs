@@ -1,6 +1,6 @@
 use cfpyo3_bindings::register_submodule;
 use numpy::{ndarray::ArrayView2, IntoPyArray, PyArray1, PyReadonlyArray2};
-use pyo3::{prelude::*, py_run};
+use pyo3::prelude::*;
 
 mod toolkit;
 
