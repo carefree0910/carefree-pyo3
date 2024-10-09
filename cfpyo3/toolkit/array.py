@@ -1,8 +1,10 @@
 from typing import Any
 from typing import List
 from typing import Tuple
-from typing import Callable
+from typing import Generic
+from typing import TypeVar
 from typing import Optional
+from typing import Protocol
 from typing import TYPE_CHECKING
 
 from cfpyo3._rs.toolkit.array import mean_axis1_f32
@@ -24,15 +26,21 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+TRes = TypeVar("TRes", covariant=True)
+
+
+class Fn(Protocol, Generic[TRes]):
+    def __call__(self, *args: Any, **kwargs: Any) -> TRes: ...
+
 
 def _dispatch(
     name: str,
-    f32_fn: Callable,
-    f64_fn: Callable,
+    f32_fn: Fn[TRes],
+    f64_fn: Fn[TRes],
     pivot: "np.ndarray",
     *args: Any,
     **kwargs: Any,
-) -> "np.ndarray":
+) -> TRes:
     import numpy as np
 
     if pivot.dtype == np.float32:
