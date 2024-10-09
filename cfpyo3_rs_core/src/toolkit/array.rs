@@ -193,6 +193,8 @@ impl<T> AFloat for T where
 {
 }
 
+// ops
+
 fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
     let mut sum = T::zero();
     let mut num = T::zero();
@@ -263,6 +265,8 @@ fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayV
         .collect();
     corr_with(a, b, valid_indices)
 }
+
+// axis1 wrappers
 
 pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
@@ -358,6 +362,8 @@ pub fn masked_corr_axis1<T: AFloat>(
     }
     res
 }
+
+// misc
 
 pub fn searchsorted<T: Ord>(arr: &ArrayView1<T>, value: &T) -> usize {
     arr.as_slice()
