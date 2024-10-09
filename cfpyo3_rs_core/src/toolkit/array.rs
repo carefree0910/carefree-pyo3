@@ -208,6 +208,14 @@ fn get_valid_indices<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> Vec<usize
         })
         .collect()
 }
+#[inline]
+fn convert_valid_indices(valid_mask: ArrayView1<bool>) -> Vec<usize> {
+    valid_mask
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &valid)| if valid { Some(i) } else { None })
+        .collect()
+}
 
 fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
     let mut sum = T::zero();
@@ -262,12 +270,7 @@ fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
     corr_with(a, b, get_valid_indices(a, b))
 }
 fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
-    let valid_indices = valid_mask
-        .iter()
-        .enumerate()
-        .filter_map(|(i, &valid)| if valid { Some(i) } else { None })
-        .collect();
-    corr_with(a, b, valid_indices)
+    corr_with(a, b, convert_valid_indices(valid_mask))
 }
 
 // axis1 wrappers
