@@ -128,7 +128,9 @@ def fast_concat_dfs_axis0(
 
 __all__ = [
     "mean_axis1",
+    "masked_mean_axis1",
     "corr_axis1",
+    "masked_corr_axis1",
     "fast_concat_2d_axis0",
     "fast_concat_dfs_axis0",
 ]
