@@ -217,6 +217,25 @@ fn convert_valid_indices(valid_mask: ArrayView1<bool>) -> Vec<usize> {
         .collect()
 }
 
+#[inline]
+fn sorted_quantile<T: AFloat>(a: &[&T], q: T) -> T {
+    let n = a.len();
+    if n == 0 {
+        return T::nan();
+    }
+    let q = q * T::from_f64(n as f64).unwrap();
+    let i = q.floor().to_usize().unwrap();
+    if i == n - 1 {
+        return *a[n - 1];
+    }
+    let q = q - T::from_usize(i).unwrap();
+    *a[i] * (T::one() - q) + *a[i + 1] * q
+}
+#[inline]
+fn sorted_median<T: AFloat>(a: &[&T]) -> T {
+    sorted_quantile(a, T::from_f64(0.5).unwrap())
+}
+
 fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
     let mut sum = T::zero();
     let mut num = T::zero();
