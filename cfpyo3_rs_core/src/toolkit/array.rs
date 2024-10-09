@@ -195,6 +195,20 @@ impl<T> AFloat for T where
 
 // ops
 
+#[inline]
+fn get_valid_indices<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> Vec<usize> {
+    zip(a.iter(), b.iter())
+        .enumerate()
+        .filter_map(|(i, (&x, &y))| {
+            if x.is_nan() || y.is_nan() {
+                None
+            } else {
+                Some(i)
+            }
+        })
+        .collect()
+}
+
 fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
     let mut sum = T::zero();
     let mut num = T::zero();
@@ -245,17 +259,7 @@ fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<u
     cov / (var1.sqrt() * var2.sqrt())
 }
 fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
-    let valid_indices: Vec<usize> = zip(a.iter(), b.iter())
-        .enumerate()
-        .filter_map(|(i, (&x, &y))| {
-            if x.is_nan() || y.is_nan() {
-                None
-            } else {
-                Some(i)
-            }
-        })
-        .collect();
-    corr_with(a, b, valid_indices)
+    corr_with(a, b, get_valid_indices(a, b))
 }
 fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
     let valid_indices = valid_mask
