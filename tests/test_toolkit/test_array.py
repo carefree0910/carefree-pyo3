@@ -26,17 +26,6 @@ def generate_arrays(dtype: np.dtype) -> List[np.ndarray]:
     ]
 
 
-def corr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    valid_mask = np.isfinite(a) & np.isfinite(b)
-    a = a[valid_mask]
-    b = b[valid_mask]
-    return np.corrcoef(a, b)[0, 1]
-
-
-def batch_corr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.array([corr(a[i], b[i]) for i in range(a.shape[0])])
-
-
 def test_fast_concat_2d_axis0():
     for dtype in [np.float32, np.float64]:
         for _ in range(10):
@@ -60,6 +49,17 @@ def test_mean_axis1():
             valid_mask = np.isfinite(a)
             assert_allclose(np.nanmean(a, axis=1), mean_axis1(a))
             assert_allclose(np.nanmean(a, axis=1), masked_mean_axis1(a, valid_mask))
+
+
+def corr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    valid_mask = np.isfinite(a) & np.isfinite(b)
+    a = a[valid_mask]
+    b = b[valid_mask]
+    return np.corrcoef(a, b)[0, 1]
+
+
+def batch_corr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return np.array([corr(a[i], b[i]) for i in range(a.shape[0])])
 
 
 def test_corr_axis1():
