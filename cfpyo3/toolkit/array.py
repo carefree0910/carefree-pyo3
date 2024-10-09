@@ -1,5 +1,6 @@
 from typing import Any
 from typing import List
+from typing import Tuple
 from typing import Callable
 from typing import Optional
 from typing import TYPE_CHECKING
@@ -12,6 +13,10 @@ from cfpyo3._rs.toolkit.array import corr_axis1_f32
 from cfpyo3._rs.toolkit.array import corr_axis1_f64
 from cfpyo3._rs.toolkit.array import masked_corr_axis1_f32
 from cfpyo3._rs.toolkit.array import masked_corr_axis1_f64
+from cfpyo3._rs.toolkit.array import coeff_axis1_f32
+from cfpyo3._rs.toolkit.array import coeff_axis1_f64
+from cfpyo3._rs.toolkit.array import masked_coeff_axis1_f32
+from cfpyo3._rs.toolkit.array import masked_coeff_axis1_f64
 from cfpyo3._rs.toolkit.array import fast_concat_2d_axis0_f32
 from cfpyo3._rs.toolkit.array import fast_concat_2d_axis0_f64
 
@@ -94,6 +99,44 @@ def masked_corr_axis1(
     )
 
 
+def coeff_axis1(
+    a: "np.ndarray",
+    b: "np.ndarray",
+    q: Optional[float] = None,
+    num_threads: int = 8,
+) -> Tuple["np.ndarray", "np.ndarray"]:
+    return _dispatch(
+        "coeff_axis1",
+        coeff_axis1_f32,
+        coeff_axis1_f64,
+        a,
+        a,
+        b,
+        q,
+        num_threads=num_threads,
+    )
+
+
+def masked_coeff_axis1(
+    a: "np.ndarray",
+    b: "np.ndarray",
+    mask: "np.ndarray",
+    q: Optional[float] = None,
+    num_threads: int = 8,
+) -> Tuple["np.ndarray", "np.ndarray"]:
+    return _dispatch(
+        "masked_coeff_axis1",
+        masked_coeff_axis1_f32,
+        masked_coeff_axis1_f64,
+        a,
+        a,
+        b,
+        mask,
+        q,
+        num_threads=num_threads,
+    )
+
+
 def fast_concat_2d_axis0(arrays: List["np.ndarray"]) -> "np.ndarray":
     pivot = arrays[0]
     out = _dispatch(
@@ -131,6 +174,8 @@ __all__ = [
     "masked_mean_axis1",
     "corr_axis1",
     "masked_corr_axis1",
+    "coeff_axis1",
+    "masked_coeff_axis1",
     "fast_concat_2d_axis0",
     "fast_concat_dfs_axis0",
 ]
