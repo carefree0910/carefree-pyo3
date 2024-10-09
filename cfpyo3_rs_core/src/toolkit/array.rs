@@ -225,14 +225,14 @@ fn sorted<T: AFloat>(a: &[T]) -> Vec<&T> {
 }
 #[inline]
 fn sorted_quantile<T: AFloat>(a: &[&T], q: T) -> T {
-    let n = a.len();
-    if n == 0 {
+    if a.is_empty() {
         return T::nan();
     }
+    let n = a.len() - 1;
     let q = q * T::from_f64(n as f64).unwrap();
     let i = q.floor().to_usize().unwrap();
-    if i == n - 1 {
-        return *a[n - 1];
+    if i == n {
+        return *a[n];
     }
     let q = q - T::from_usize(i).unwrap();
     *a[i] * (T::one() - q) + *a[i + 1] * q
