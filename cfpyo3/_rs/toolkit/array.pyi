@@ -39,27 +39,27 @@ def masked_corr_axis1_f64(
     num_threads: int = 8,
 ) -> np.ndarray: ...
 def coeff_axis1_f32(
-    a: np.ndarray,
-    b: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
     q: Optional[float] = None,
     num_threads: int = 8,
 ) -> Tuple[np.ndarray, np.ndarray]: ...
 def coeff_axis1_f64(
-    a: np.ndarray,
-    b: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
     q: Optional[float] = None,
     num_threads: int = 8,
 ) -> Tuple[np.ndarray, np.ndarray]: ...
 def masked_coeff_axis1_f32(
-    a: np.ndarray,
-    b: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
     valid_mask: np.ndarray,
     q: Optional[float] = None,
     num_threads: int = 8,
 ) -> Tuple[np.ndarray, np.ndarray]: ...
 def masked_coeff_axis1_f64(
-    a: np.ndarray,
-    b: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
     valid_mask: np.ndarray,
     q: Optional[float] = None,
     num_threads: int = 8,
