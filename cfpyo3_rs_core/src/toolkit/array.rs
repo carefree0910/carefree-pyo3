@@ -218,6 +218,12 @@ fn convert_valid_indices(valid_mask: ArrayView1<bool>) -> Vec<usize> {
 }
 
 #[inline]
+fn sorted<T: AFloat>(a: &[T]) -> Vec<&T> {
+    a.iter()
+        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
+        .collect_vec()
+}
+#[inline]
 fn sorted_quantile<T: AFloat>(a: &[&T], q: T) -> T {
     let n = a.len();
     if n == 0 {
@@ -316,13 +322,10 @@ fn coeff_with<T: AFloat>(
     }
     let x = x.select(Axis(0), &valid_indices);
     let mut y = y.select(Axis(0), &valid_indices);
-    let x_sorted = x
-        .iter()
-        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
-        .collect_vec();
+    let x_sorted = sorted(x.as_slice().unwrap());
     let x_med = sorted_median(&x_sorted);
     let x_mad = x_sorted.iter().map(|&x| (*x - x_med).abs()).collect_vec();
-    let x_mad = sorted_median(&x_mad.iter().collect_vec());
+    let x_mad = sorted_median(&sorted(&x_mad));
     let hundred = T::from_f64(100.0).unwrap();
     let x_floor = x_med - hundred * x_mad;
     let x_ceil = x_med + hundred * x_mad;
