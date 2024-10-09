@@ -1,7 +1,7 @@
 use anyhow::Result;
-use itertools::{enumerate, izip};
+use itertools::{enumerate, izip, Itertools};
 use num_traits::{Float, FromPrimitive};
-use numpy::ndarray::{ArrayView1, ArrayView2, Axis, ScalarOperand};
+use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
 use std::{
     cell::UnsafeCell,
     fmt::{Debug, Display},
@@ -236,6 +236,18 @@ fn sorted_median<T: AFloat>(a: &[&T]) -> T {
     sorted_quantile(a, T::from_f64(0.5).unwrap())
 }
 
+#[inline]
+fn solve_2d<T: AFloat>(x: ArrayView2<T>, y: ArrayView1<T>) -> (T, T) {
+    let xtx = x.t().dot(&x);
+    let xty = x.t().dot(&y);
+    let xtx = xtx.into_raw_vec();
+    let (a, b, c, d) = (xtx[0], xtx[1], xtx[2], xtx[3]);
+    let xtx_inv = Array2::from_shape_vec((2, 2), vec![d, -b, -c, a]).unwrap();
+    let xtx_inv = xtx_inv / (a * d - b * c);
+    let solution = xtx_inv.dot(&xty);
+    (solution[0], solution[1])
+}
+
 fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
     let mut sum = T::zero();
     let mut num = T::zero();
@@ -290,6 +302,66 @@ fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
 }
 fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
     corr_with(a, b, convert_valid_indices(valid_mask))
+}
+
+#[inline]
+fn coeff_with<T: AFloat>(
+    x: ArrayView1<T>,
+    y: ArrayView1<T>,
+    valid_indices: Vec<usize>,
+    q: Option<T>,
+) -> (T, T) {
+    if valid_indices.is_empty() {
+        return (T::nan(), T::nan());
+    }
+    let x = x.select(Axis(0), &valid_indices);
+    let mut y = y.select(Axis(0), &valid_indices);
+    let x_sorted = x
+        .iter()
+        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
+        .collect_vec();
+    let x_med = sorted_median(&x_sorted);
+    let x_mad = x_sorted.iter().map(|&x| (*x - x_med).abs()).collect_vec();
+    let x_mad = sorted_median(&x_mad.iter().collect_vec());
+    let hundred = T::from_f64(100.0).unwrap();
+    let x_floor = x_med - hundred * x_mad;
+    let x_ceil = x_med + hundred * x_mad;
+    let x = Array1::from_iter(x.iter().map(|&x| x.max(x_floor).min(x_ceil)));
+    let x_mean = x.mean().unwrap();
+    let x_std = x.std(T::zero());
+    let mut x = (x - x_mean) / x_std;
+    if let Some(q) = q {
+        if q > T::zero() {
+            let q_floor = sorted_quantile(&x_sorted, q);
+            let q_ceil = sorted_quantile(&x_sorted, T::one() - q);
+            let picked_indices: Vec<usize> = x
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &x)| {
+                    if x <= q_floor && x >= q_ceil {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            x = x.select(Axis(0), &picked_indices);
+            y = y.select(Axis(0), &picked_indices);
+        }
+    }
+    let x = stack![Axis(1), x, Array1::ones(x.len())];
+    solve_2d(x.view(), y.view())
+}
+fn coeff<T: AFloat>(x: ArrayView1<T>, y: ArrayView1<T>, q: Option<T>) -> (T, T) {
+    coeff_with(x, y, get_valid_indices(x, y), q)
+}
+fn masked_coeff<T: AFloat>(
+    x: ArrayView1<T>,
+    y: ArrayView1<T>,
+    valid_mask: ArrayView1<bool>,
+    q: Option<T>,
+) -> (T, T) {
+    coeff_with(x, y, convert_valid_indices(valid_mask), q)
 }
 
 // axis1 wrappers
@@ -389,6 +461,82 @@ pub fn masked_corr_axis1<T: AFloat>(
     res
 }
 
+pub fn coeff_axis1<T: AFloat>(
+    x: &ArrayView2<T>,
+    y: &ArrayView2<T>,
+    q: Option<T>,
+    num_threads: usize,
+) -> (Vec<T>, Vec<T>) {
+    let mut ws: Vec<T> = vec![T::zero(); x.nrows()];
+    let mut bs: Vec<T> = vec![T::zero(); x.nrows()];
+    let mut slice0 = UnsafeSlice::new(ws.as_mut_slice());
+    let mut slice1 = UnsafeSlice::new(bs.as_mut_slice());
+    if num_threads <= 1 {
+        izip!(x.rows(), y.rows())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                let (w, b) = coeff(x, y, q);
+                slice0.set(i, w);
+                slice1.set(i, b);
+            });
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+        pool.scope(move |s| {
+            izip!(x.rows(), y.rows())
+                .enumerate()
+                .for_each(|(i, (x, y))| {
+                    s.spawn(move |_| {
+                        let (w, b) = coeff(x, y, q);
+                        slice0.set(i, w);
+                        slice1.set(i, b);
+                    });
+                });
+        });
+    }
+    (ws, bs)
+}
+pub fn masked_coeff_axis1<T: AFloat>(
+    x: &ArrayView2<T>,
+    y: &ArrayView2<T>,
+    valid_mask: &ArrayView2<bool>,
+    q: Option<T>,
+    num_threads: usize,
+) -> (Vec<T>, Vec<T>) {
+    let mut ws: Vec<T> = vec![T::zero(); x.nrows()];
+    let mut bs: Vec<T> = vec![T::zero(); x.nrows()];
+    let mut slice0 = UnsafeSlice::new(ws.as_mut_slice());
+    let mut slice1 = UnsafeSlice::new(bs.as_mut_slice());
+    if num_threads <= 1 {
+        izip!(x.rows(), y.rows(), valid_mask.rows())
+            .enumerate()
+            .for_each(|(i, (x, y, valid_mask))| {
+                let (w, b) = masked_coeff(x, y, valid_mask, q);
+                slice0.set(i, w);
+                slice1.set(i, b);
+            });
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+        pool.scope(move |s| {
+            izip!(x.rows(), y.rows(), valid_mask.rows())
+                .enumerate()
+                .for_each(|(i, (x, y, valid_mask))| {
+                    s.spawn(move |_| {
+                        let (w, b) = masked_coeff(x, y, valid_mask, q);
+                        slice0.set(i, w);
+                        slice1.set(i, b);
+                    });
+                });
+        });
+    }
+    (ws, bs)
+}
+
 // misc
 
 pub fn searchsorted<T: Ord>(arr: &ArrayView1<T>, value: &T) -> usize {
@@ -415,9 +563,9 @@ mod tests {
         a.iter().zip(b.iter()).for_each(|(&x, &y)| {
             assert!(
                 (x - y).abs() <= atol + rtol * y.abs(),
-                "not close - x: {:?}, y: {:?}",
-                x,
-                y
+                "not close - a: {:?}, b: {:?}",
+                a,
+                b,
             );
         });
     }
@@ -482,6 +630,19 @@ mod tests {
     #[test]
     fn test_corr_axis1_f64() {
         test_corr_axis1!(f64);
+    }
+
+    #[test]
+    fn test_coeff_axis1() {
+        let x = ArrayView2::<f64>::from_shape((2, 3), &[1., 2., 3., 4., 5., 6.]).unwrap();
+        let y = ArrayView2::<f64>::from_shape((2, 3), &[2., 4., 6., 8., 10., 12.]).unwrap();
+        let scale = 2. * (2. / 3.).sqrt();
+        let (ws, bs) = coeff_axis1(&x, &y, None, 1);
+        assert_allclose(ws.as_slice(), &[scale, scale]);
+        assert_allclose(bs.as_slice(), &[4., 10.]);
+        let (ws, bs) = coeff_axis1(&x, &y, None, 2);
+        assert_allclose(ws.as_slice(), &[scale, scale]);
+        assert_allclose(bs.as_slice(), &[4., 10.]);
     }
 
     #[test]
