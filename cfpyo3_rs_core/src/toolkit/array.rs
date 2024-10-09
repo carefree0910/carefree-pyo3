@@ -638,8 +638,8 @@ mod tests {
 
     #[test]
     fn test_coeff_axis1() {
-        let x = ArrayView2::<f64>::from_shape((2, 3), &[1., 2., 3., 4., 5., 6.]).unwrap();
-        let y = ArrayView2::<f64>::from_shape((2, 3), &[2., 4., 6., 8., 10., 12.]).unwrap();
+        let x = ArrayView2::<f64>::from_shape((2, 3), &[2., 1., 3., 6., 4., 5.]).unwrap();
+        let y = ArrayView2::<f64>::from_shape((2, 3), &[4., 2., 6., 12., 8., 10.]).unwrap();
         let scale = 2. * (2. / 3.).sqrt();
         let (ws, bs) = coeff_axis1(&x, &y, None, 1);
         assert_allclose(ws.as_slice(), &[scale, scale]);
