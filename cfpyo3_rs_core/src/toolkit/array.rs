@@ -335,13 +335,14 @@ fn coeff_with<T: AFloat>(
     let mut x = (x - x_mean) / x_std;
     if let Some(q) = q {
         if q > T::zero() {
+            let x_sorted = sorted(x.as_slice().unwrap());
             let q_floor = sorted_quantile(&x_sorted, q);
             let q_ceil = sorted_quantile(&x_sorted, T::one() - q);
             let picked_indices: Vec<usize> = x
                 .iter()
                 .enumerate()
                 .filter_map(|(i, &x)| {
-                    if x <= q_floor && x >= q_ceil {
+                    if x <= q_floor || x >= q_ceil {
                         Some(i)
                     } else {
                         None
