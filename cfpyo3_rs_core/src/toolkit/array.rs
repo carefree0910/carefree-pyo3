@@ -263,8 +263,8 @@ fn solve_2d<T: AFloat>(x: ArrayView2<T>, y: ArrayView1<T>) -> (T, T) {
     let xtx = xtx.into_raw_vec();
     let (a, b, c, d) = (xtx[0], xtx[1], xtx[2], xtx[3]);
     let xtx_inv = Array2::from_shape_vec((2, 2), vec![d, -b, -c, a]).unwrap();
-    let xtx_inv = xtx_inv / (a * d - b * c);
     let solution = xtx_inv.dot(&xty);
+    let solution = solution / (a * d - b * c).max(T::epsilon());
     (solution[0], solution[1])
 }
 
@@ -345,7 +345,7 @@ fn coeff_with<T: AFloat>(
     let x_ceil = x_med + hundred * x_mad;
     let x = Array1::from_iter(x.iter().map(|&x| x.max(x_floor).min(x_ceil)));
     let x_mean = x.mean().unwrap();
-    let x_std = x.std(T::zero());
+    let x_std = x.std(T::zero()).max(T::epsilon());
     let mut x = (x - x_mean) / x_std;
     if let Some(q) = q {
         if q > T::zero() {
