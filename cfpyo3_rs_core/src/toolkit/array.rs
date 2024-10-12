@@ -4,6 +4,7 @@ use num_traits::{Float, FromPrimitive};
 use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
 use std::{
     cell::UnsafeCell,
+    cmp::Ordering,
     fmt::{Debug, Display},
     iter::zip,
     mem,
@@ -218,9 +219,22 @@ fn convert_valid_indices(valid_mask: ArrayView1<bool>) -> Vec<usize> {
 }
 
 #[inline]
+/// this function will put `NaN` at the end
 fn sorted<T: AFloat>(a: &[T]) -> Vec<&T> {
     a.iter()
-        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
+        .sorted_by(|a, b| {
+            if a.is_nan() {
+                if b.is_nan() {
+                    Ordering::Equal
+                } else {
+                    Ordering::Greater
+                }
+            } else if b.is_nan() {
+                Ordering::Less
+            } else {
+                a.partial_cmp(b).unwrap()
+            }
+        })
         .collect_vec()
 }
 #[inline]
