@@ -196,6 +196,8 @@ impl<T> AFloat for T where
 
 // ops
 
+const LANES: usize = 16;
+
 #[inline]
 fn get_valid_indices<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> Vec<usize> {
     zip(a.iter(), b.iter())
@@ -268,21 +270,39 @@ fn solve_2d<T: AFloat>(x: ArrayView2<T>, y: ArrayView1<T>) -> (T, T) {
     (solution[0], solution[1])
 }
 
-fn mean<T: AFloat>(a: ArrayView1<T>) -> T {
-    let mut sum = T::zero();
-    let mut num = T::zero();
-    for &x in a.iter() {
-        if x.is_nan() {
-            continue;
-        }
-        sum += x;
-        num += T::one();
-    }
-    if num.is_zero() {
-        T::nan()
-    } else {
-        sum / num
-    }
+fn simd_mean<T: AFloat>(a: &[T]) -> T {
+    let chunks = a.chunks_exact(LANES);
+    let remainder = chunks.remainder();
+
+    let sum = chunks.clone().fold([T::zero(); LANES], |mut acc, chunk| {
+        let chunk: [T; LANES] = chunk.try_into().unwrap();
+        (0..LANES).for_each(|i| {
+            let value = chunk[i];
+            acc[i] += if value.is_nan() { T::zero() } else { value };
+        });
+        acc
+    });
+    let num = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
+        let chunk: [T; LANES] = chunk.try_into().unwrap();
+        (0..LANES).for_each(|i| {
+            let value = chunk[i];
+            acc[i] += if value.is_nan() { T::zero() } else { T::one() };
+        });
+        acc
+    });
+
+    let mut reduced = [T::zero(), T::zero()];
+    (0..LANES).for_each(|i| {
+        reduced[0] += sum[i];
+        reduced[1] += num[i];
+    });
+
+    remainder.iter().for_each(|&x| {
+        reduced[0] += if x.is_nan() { T::zero() } else { x };
+        reduced[1] += if x.is_nan() { T::zero() } else { T::one() };
+    });
+
+    reduced[0] / reduced[1]
 }
 fn masked_mean<T: AFloat>(a: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
     let mut sum = T::zero();
@@ -389,7 +409,7 @@ pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     if num_threads <= 1 {
         enumerate(a.rows()).for_each(|(i, row)| {
-            slice.set(i, mean(row));
+            slice.set(i, simd_mean(row.as_slice().unwrap()));
         });
     } else {
         let pool = rayon::ThreadPoolBuilder::new()
@@ -398,7 +418,7 @@ pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
             .unwrap();
         pool.scope(|s| {
             enumerate(a.rows()).for_each(|(i, row)| {
-                s.spawn(move |_| slice.set(i, mean(row)));
+                s.spawn(move |_| slice.set(i, simd_mean(row.as_slice().unwrap())));
             });
         });
     }
