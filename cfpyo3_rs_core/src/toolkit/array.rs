@@ -378,7 +378,7 @@ fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<u
     let var2 = b.dot(&b);
     cov / (var1.sqrt() * var2.sqrt())
 }
-fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
+fn nancorr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
     corr_with(a, b, get_valid_indices(a, b))
 }
 fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
@@ -519,11 +519,15 @@ pub fn masked_mean_axis1<T: AFloat>(
     res
 }
 
-pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
+pub fn nancorr_axis1<T: AFloat>(
+    a: &ArrayView2<T>,
+    b: &ArrayView2<T>,
+    num_threads: usize,
+) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     parallel_apply!(
-        |(a, b): (ArrayView1<T>, ArrayView1<T>)| corr(a, b),
+        |(a, b): (ArrayView1<T>, ArrayView1<T>)| nancorr(a, b),
         zip(a.rows(), b.rows()),
         slice,
         num_threads
@@ -686,9 +690,9 @@ mod tests {
         ($dtype:ty) => {
             let array =
                 ArrayView2::<$dtype>::from_shape((2, 3), &[1., 2., 3., 4., 5., 6.]).unwrap();
-            let out = corr_axis1(&array, &(&array + 1.).view(), 1);
+            let out = nancorr_axis1(&array, &(&array + 1.).view(), 1);
             assert_allclose(out.as_slice(), &[1., 1.]);
-            let out = corr_axis1(&array, &(&array + 1.).view(), 2);
+            let out = nancorr_axis1(&array, &(&array + 1.).view(), 2);
             assert_allclose(out.as_slice(), &[1., 1.]);
         };
     }

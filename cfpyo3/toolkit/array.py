@@ -15,8 +15,8 @@ from cfpyo3._rs.toolkit.array import nanmean_axis1_f32
 from cfpyo3._rs.toolkit.array import nanmean_axis1_f64
 from cfpyo3._rs.toolkit.array import masked_mean_axis1_f32
 from cfpyo3._rs.toolkit.array import masked_mean_axis1_f64
-from cfpyo3._rs.toolkit.array import corr_axis1_f32
-from cfpyo3._rs.toolkit.array import corr_axis1_f64
+from cfpyo3._rs.toolkit.array import nancorr_axis1_f32
+from cfpyo3._rs.toolkit.array import nancorr_axis1_f64
 from cfpyo3._rs.toolkit.array import masked_corr_axis1_f32
 from cfpyo3._rs.toolkit.array import masked_corr_axis1_f64
 from cfpyo3._rs.toolkit.array import coeff_axis1_f32
@@ -103,11 +103,13 @@ def masked_mean_axis1(
     )
 
 
-def corr_axis1(a: "np.ndarray", b: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+def nancorr_axis1(
+    a: "np.ndarray", b: "np.ndarray", num_threads: int = 8
+) -> "np.ndarray":
     return _dispatch(
-        "corr_axis1",
-        corr_axis1_f32,
-        corr_axis1_f64,
+        "nancorr_axis1",
+        nancorr_axis1_f32,
+        nancorr_axis1_f64,
         a,
         a,
         b,

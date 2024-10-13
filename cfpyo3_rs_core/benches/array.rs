@@ -63,13 +63,19 @@ macro_rules! bench_mean_axis1_full {
 }
 macro_rules! bench_corr_axis1 {
     ($c:expr, $multiplier:expr, $nthreads:expr, $a32:expr, $a64:expr) => {{
-        let name_f32 = format!("corr_axis1 (f32) (x{}, {} threads)", $multiplier, $nthreads);
-        let name_f64 = format!("corr_axis1 (f64) (x{}, {} threads)", $multiplier, $nthreads);
+        let name_f32 = format!(
+            "nancorr_axis1 (f32) (x{}, {} threads)",
+            $multiplier, $nthreads
+        );
+        let name_f64 = format!(
+            "nancorr_axis1 (f64) (x{}, {} threads)",
+            $multiplier, $nthreads
+        );
         $c.bench_function(&name_f32, |b| {
-            b.iter(|| corr_axis1(black_box($a32), black_box($a32), black_box($nthreads)))
+            b.iter(|| nancorr_axis1(black_box($a32), black_box($a32), black_box($nthreads)))
         });
         $c.bench_function(&name_f64, |b| {
-            b.iter(|| corr_axis1(black_box($a64), black_box($a64), black_box($nthreads)))
+            b.iter(|| nancorr_axis1(black_box($a64), black_box($a64), black_box($nthreads)))
         });
     }};
 }

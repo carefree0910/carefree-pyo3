@@ -1,5 +1,5 @@
 use super::DataFrame;
-use crate::toolkit::array::{corr_axis1, nanmean_axis1, AFloat};
+use crate::toolkit::array::{nancorr_axis1, nanmean_axis1, AFloat};
 use numpy::ndarray::ArrayView2;
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -8,6 +8,6 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
     }
 
     pub fn corr_with_axis1(&'a self, other: ArrayView2<T>, num_threads: usize) -> Vec<T> {
-        corr_axis1(&self.values.view(), &other.view(), num_threads)
+        nancorr_axis1(&self.values.view(), &other.view(), num_threads)
     }
 }

@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 
 from typing import List
-from cfpyo3.toolkit.array import corr_axis1
 from cfpyo3.toolkit.array import sum_axis1
 from cfpyo3.toolkit.array import mean_axis1
 from cfpyo3.toolkit.array import nanmean_axis1
+from cfpyo3.toolkit.array import nancorr_axis1
 from cfpyo3.toolkit.array import coeff_axis1
 from cfpyo3.toolkit.array import masked_mean_axis1
 from cfpyo3.toolkit.array import masked_corr_axis1
@@ -75,7 +75,7 @@ def test_corr_axis1():
             a = generate_array(dtype)
             b = generate_array(dtype)
             valid_mask = np.isfinite(a) & np.isfinite(b)
-            assert_allclose(batch_corr(a, b), corr_axis1(a, b))
+            assert_allclose(batch_corr(a, b), nancorr_axis1(a, b))
             assert_allclose(batch_corr(a, b), masked_corr_axis1(a, b, valid_mask))
 
 
