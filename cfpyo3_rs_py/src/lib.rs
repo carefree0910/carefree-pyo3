@@ -22,6 +22,30 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ($type_str:ident, $dtype:ty) => {
             paste::item! {
                 #[pyfunction]
+                pub fn [< sum_axis1_ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let num_threads = num_threads.unwrap_or(0);
+                    cfpyo3_core::toolkit::array::sum_axis1(&a, num_threads).into_pyarray_bound(py)
+                }
+            }
+            paste::item! {
+                #[pyfunction]
+                pub fn [< mean_axis1_ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let num_threads = num_threads.unwrap_or(0);
+                    cfpyo3_core::toolkit::array::mean_axis1(&a, num_threads).into_pyarray_bound(py)
+                }
+            }
+            paste::item! {
+                #[pyfunction]
                 pub fn [< nanmean_axis1_ $type_str >]<'py>(
                     py: Python<'py>,
                     a: PyReadonlyArray2<$dtype>,
@@ -124,6 +148,10 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     array_ops_impl!(f32, f32);
     array_ops_impl!(f64, f64);
+    array_module.add_function(wrap_pyfunction!(sum_axis1_f32, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(sum_axis1_f64, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(mean_axis1_f32, &array_module)?)?;
+    array_module.add_function(wrap_pyfunction!(mean_axis1_f64, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(nanmean_axis1_f32, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(nanmean_axis1_f64, &array_module)?)?;
     array_module.add_function(wrap_pyfunction!(masked_mean_axis1_f32, &array_module)?)?;

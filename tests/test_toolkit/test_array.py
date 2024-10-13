@@ -5,6 +5,8 @@ import pandas as pd
 
 from typing import List
 from cfpyo3.toolkit.array import corr_axis1
+from cfpyo3.toolkit.array import sum_axis1
+from cfpyo3.toolkit.array import mean_axis1
 from cfpyo3.toolkit.array import nanmean_axis1
 from cfpyo3.toolkit.array import coeff_axis1
 from cfpyo3.toolkit.array import masked_mean_axis1
@@ -14,10 +16,11 @@ from cfpyo3.toolkit.array import fast_concat_2d_axis0
 from cfpyo3.toolkit.array import fast_concat_dfs_axis0
 
 
-def generate_array(dtype: np.dtype) -> np.ndarray:
+def generate_array(dtype: np.dtype, *, no_nan: bool = False) -> np.ndarray:
     x = np.random.random(239 * 5000).astype(dtype)
-    mask = x <= 0.25
-    x[mask] = np.nan
+    if not no_nan:
+        mask = x <= 0.25
+        x[mask] = np.nan
     return x.reshape([239, 5000])
 
 
@@ -46,11 +49,13 @@ def assert_allclose(a: np.ndarray, b: np.ndarray) -> None:
 
 def test_mean_axis1():
     for dtype in [np.float32, np.float64]:
-        for _ in range(3):
-            a = generate_array(dtype)
-            valid_mask = np.isfinite(a)
-            assert_allclose(np.nanmean(a, axis=1), nanmean_axis1(a))
-            assert_allclose(np.nanmean(a, axis=1), masked_mean_axis1(a, valid_mask))
+        a = generate_array(dtype)
+        valid_mask = np.isfinite(a)
+        assert_allclose(np.nanmean(a, axis=1), nanmean_axis1(a))
+        assert_allclose(np.nanmean(a, axis=1), masked_mean_axis1(a, valid_mask))
+        a = generate_array(dtype, no_nan=True)
+        assert_allclose(np.sum(a, axis=1), sum_axis1(a))
+        assert_allclose(np.mean(a, axis=1), mean_axis1(a))
 
 
 def corr(a: np.ndarray, b: np.ndarray) -> np.ndarray:

@@ -7,6 +7,10 @@ from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
 
+from cfpyo3._rs.toolkit.array import sum_axis1_f32
+from cfpyo3._rs.toolkit.array import sum_axis1_f64
+from cfpyo3._rs.toolkit.array import mean_axis1_f32
+from cfpyo3._rs.toolkit.array import mean_axis1_f64
 from cfpyo3._rs.toolkit.array import nanmean_axis1_f32
 from cfpyo3._rs.toolkit.array import nanmean_axis1_f64
 from cfpyo3._rs.toolkit.array import masked_mean_axis1_f32
@@ -48,6 +52,28 @@ def _dispatch(
     if pivot.dtype == np.float64:
         return f64_fn(*args, **kwargs)
     raise ValueError(f"`{name}` only supports `f32` & `f64`, '{pivot.dtype}' found")
+
+
+def sum_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+    return _dispatch(
+        "sum_axis1",
+        sum_axis1_f32,
+        sum_axis1_f64,
+        array,
+        array,
+        num_threads=num_threads,
+    )
+
+
+def mean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+    return _dispatch(
+        "mean_axis1",
+        mean_axis1_f32,
+        mean_axis1_f64,
+        array,
+        array,
+        num_threads=num_threads,
+    )
 
 
 def nanmean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
