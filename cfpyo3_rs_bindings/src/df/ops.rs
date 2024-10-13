@@ -3,8 +3,8 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
 pub trait Ops: WithCore {
-    fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.to_core(py).mean_axis1(8).into_pyarray_bound(py)
+    fn nanmean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        self.to_core(py).nanmean_axis1(8).into_pyarray_bound(py)
     }
 
     fn corr_with_axis1<'py>(
@@ -25,8 +25,8 @@ macro_rules! ops_bindings_impl {
 
         #[pymethods]
         impl $type {
-            fn mean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-                Ops::mean_axis1(self, py)
+            fn nanmean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+                Ops::nanmean_axis1(self, py)
             }
             fn corr_with_axis1<'py>(
                 &'py self,

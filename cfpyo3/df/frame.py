@@ -108,8 +108,8 @@ class DataFrame:
         df = self.py_df
         return DataFrame(df.with_data(df.values**exponent))
 
-    def mean_axis1(self) -> "np.ndarray":
-        return self._df.mean_axis1()
+    def nanmean_axis1(self) -> "np.ndarray":
+        return self._df.nanmean_axis1()
 
     def corr_with_axis1(self, other: RHS) -> "np.ndarray":
         return self._df.corr_with_axis1(rhs_to_np(other))

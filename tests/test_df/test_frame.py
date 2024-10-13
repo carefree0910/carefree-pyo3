@@ -56,9 +56,9 @@ def test_mse():
         df1 = get_random_pandas_df()
         df_rs0 = DataFrame.from_pandas(df0)
         mse0 = (df0 - df1).pow(2).mean(axis=1).values
-        mse1 = (df_rs0 - df1).pow(2).mean_axis1()
-        mse2 = (df_rs0 - df1.values).pow(2).mean_axis1()
-        mse3 = (df_rs0 - DataFrame.from_pandas(df1)).pow(2).mean_axis1()
+        mse1 = (df_rs0 - df1).pow(2).nanmean_axis1()
+        mse2 = (df_rs0 - df1.values).pow(2).nanmean_axis1()
+        mse3 = (df_rs0 - DataFrame.from_pandas(df1)).pow(2).nanmean_axis1()
         np.testing.assert_allclose(mse0, mse1)
         np.testing.assert_allclose(mse0, mse2)
         np.testing.assert_allclose(mse0, mse3)

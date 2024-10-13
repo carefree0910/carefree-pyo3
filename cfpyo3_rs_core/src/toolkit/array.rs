@@ -270,7 +270,7 @@ fn solve_2d<T: AFloat>(x: ArrayView2<T>, y: ArrayView1<T>) -> (T, T) {
     (solution[0], solution[1])
 }
 
-fn simd_mean<T: AFloat>(a: &[T]) -> T {
+fn simd_nanmean<T: AFloat>(a: &[T]) -> T {
     let chunks = a.chunks_exact(LANES);
     let remainder = chunks.remainder();
 
@@ -404,12 +404,12 @@ fn masked_coeff<T: AFloat>(
 
 // axis1 wrappers
 
-pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
+pub fn nanmean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     if num_threads <= 1 {
         enumerate(a.rows()).for_each(|(i, row)| {
-            slice.set(i, simd_mean(row.as_slice().unwrap()));
+            slice.set(i, simd_nanmean(row.as_slice().unwrap()));
         });
     } else {
         let pool = rayon::ThreadPoolBuilder::new()
@@ -418,7 +418,7 @@ pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
             .unwrap();
         pool.scope(|s| {
             enumerate(a.rows()).for_each(|(i, row)| {
-                s.spawn(move |_| slice.set(i, simd_mean(row.as_slice().unwrap())));
+                s.spawn(move |_| slice.set(i, simd_nanmean(row.as_slice().unwrap())));
             });
         });
     }
@@ -625,9 +625,9 @@ mod tests {
         ($dtype:ty) => {
             let array =
                 ArrayView2::<$dtype>::from_shape((2, 3), &[1., 2., 3., 4., 5., 6.]).unwrap();
-            let out = mean_axis1(&array, 1);
+            let out = nanmean_axis1(&array, 1);
             assert_allclose(out.as_slice(), &[2., 5.]);
-            let out = mean_axis1(&array, 2);
+            let out = nanmean_axis1(&array, 2);
             assert_allclose(out.as_slice(), &[2., 5.]);
         };
     }

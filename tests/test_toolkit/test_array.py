@@ -5,7 +5,7 @@ import pandas as pd
 
 from typing import List
 from cfpyo3.toolkit.array import corr_axis1
-from cfpyo3.toolkit.array import mean_axis1
+from cfpyo3.toolkit.array import nanmean_axis1
 from cfpyo3.toolkit.array import coeff_axis1
 from cfpyo3.toolkit.array import masked_mean_axis1
 from cfpyo3.toolkit.array import masked_corr_axis1
@@ -49,7 +49,7 @@ def test_mean_axis1():
         for _ in range(3):
             a = generate_array(dtype)
             valid_mask = np.isfinite(a)
-            assert_allclose(np.nanmean(a, axis=1), mean_axis1(a))
+            assert_allclose(np.nanmean(a, axis=1), nanmean_axis1(a))
             assert_allclose(np.nanmean(a, axis=1), masked_mean_axis1(a, valid_mask))
 
 

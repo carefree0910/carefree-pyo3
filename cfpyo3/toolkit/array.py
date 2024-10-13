@@ -7,8 +7,8 @@ from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
 
-from cfpyo3._rs.toolkit.array import mean_axis1_f32
-from cfpyo3._rs.toolkit.array import mean_axis1_f64
+from cfpyo3._rs.toolkit.array import nanmean_axis1_f32
+from cfpyo3._rs.toolkit.array import nanmean_axis1_f64
 from cfpyo3._rs.toolkit.array import masked_mean_axis1_f32
 from cfpyo3._rs.toolkit.array import masked_mean_axis1_f64
 from cfpyo3._rs.toolkit.array import corr_axis1_f32
@@ -50,11 +50,11 @@ def _dispatch(
     raise ValueError(f"`{name}` only supports `f32` & `f64`, '{pivot.dtype}' found")
 
 
-def mean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+def nanmean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
     return _dispatch(
-        "mean_axis1",
-        mean_axis1_f32,
-        mean_axis1_f64,
+        "nanmean_axis1",
+        nanmean_axis1_f32,
+        nanmean_axis1_f64,
         array,
         array,
         num_threads=num_threads,
@@ -178,7 +178,7 @@ def fast_concat_dfs_axis0(
 
 
 __all__ = [
-    "mean_axis1",
+    "nanmean_axis1",
     "masked_mean_axis1",
     "corr_axis1",
     "masked_corr_axis1",
