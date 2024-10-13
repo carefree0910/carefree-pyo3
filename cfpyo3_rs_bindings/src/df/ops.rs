@@ -3,18 +3,25 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
 pub trait Ops: WithCore {
-    fn nanmean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-        self.to_core(py).nanmean_axis1(8).into_pyarray_bound(py)
+    fn nanmean_axis1<'py>(
+        &'py self,
+        py: Python<'py>,
+        num_threads: Option<usize>,
+    ) -> Bound<'py, PyArray1<f64>> {
+        self.to_core(py)
+            .nanmean_axis1(num_threads)
+            .into_pyarray_bound(py)
     }
 
     fn nancorr_with_axis1<'py>(
         &'py self,
         py: Python<'py>,
         other: PyReadonlyArray2<f64>,
+        num_threads: Option<usize>,
     ) -> Bound<'py, PyArray1<f64>> {
         let other = other.as_array();
         self.to_core(py)
-            .nancorr_with_axis1(other, 8)
+            .nancorr_with_axis1(other, num_threads)
             .into_pyarray_bound(py)
     }
 }
@@ -25,15 +32,20 @@ macro_rules! ops_bindings_impl {
 
         #[pymethods]
         impl $type {
-            fn nanmean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
-                Ops::nanmean_axis1(self, py)
+            fn nanmean_axis1<'py>(
+                &'py self,
+                py: Python<'py>,
+                num_threads: Option<usize>,
+            ) -> Bound<'py, PyArray1<f64>> {
+                Ops::nanmean_axis1(self, py, num_threads)
             }
             fn nancorr_with_axis1<'py>(
                 &'py self,
                 py: Python<'py>,
                 other: PyReadonlyArray2<f64>,
+                num_threads: Option<usize>,
             ) -> Bound<'py, PyArray1<f64>> {
-                Ops::nancorr_with_axis1(self, py, other)
+                Ops::nancorr_with_axis1(self, py, other, num_threads)
             }
         }
     };

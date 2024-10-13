@@ -3,6 +3,7 @@ import numpy as np
 from typing import Tuple
 from typing import Generic
 from typing import TypeVar
+from typing import Optional
 
 COLUMNS_NBYTES: int
 
@@ -14,8 +15,12 @@ class IOs(Generic[TDF]):
     def load(path: str) -> TDF: ...
 
 class Ops:
-    def nanmean_axis1(self) -> np.ndarray: ...
-    def nancorr_with_axis1(self, other: np.ndarray) -> np.ndarray: ...
+    def nanmean_axis1(self, num_threads: Optional[int]) -> np.ndarray: ...
+    def nancorr_with_axis1(
+        self,
+        other: np.ndarray,
+        num_threads: Optional[int],
+    ) -> np.ndarray: ...
 
 class DataFrameF64(IOs[DataFrameF64], Ops):
     @staticmethod

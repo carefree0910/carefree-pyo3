@@ -2,6 +2,7 @@ from os import PathLike
 from typing import Type
 from typing import Tuple
 from typing import Union
+from typing import Optional
 from typing import NamedTuple
 from typing import TYPE_CHECKING
 
@@ -108,11 +109,15 @@ class DataFrame:
         df = self.py_df
         return DataFrame(df.with_data(df.values**exponent))
 
-    def nanmean_axis1(self) -> "np.ndarray":
-        return self._df.nanmean_axis1()
+    def nanmean_axis1(self, num_threads: Optional[int] = None) -> "np.ndarray":
+        return self._df.nanmean_axis1(num_threads)
 
-    def nancorr_with_axis1(self, other: RHS) -> "np.ndarray":
-        return self._df.nancorr_with_axis1(rhs_to_np(other))
+    def nancorr_with_axis1(
+        self,
+        other: RHS,
+        num_threads: Optional[int] = None,
+    ) -> "np.ndarray":
+        return self._df.nancorr_with_axis1(rhs_to_np(other), num_threads)
 
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd
