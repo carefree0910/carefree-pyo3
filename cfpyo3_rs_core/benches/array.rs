@@ -9,6 +9,14 @@ use numpy::ndarray::{Array1, Array2};
 
 macro_rules! bench_mean_axis1 {
     ($c:expr, $multiplier:expr, $nthreads:expr, $a32:expr, $a64:expr, $mask:expr) => {{
+        let name_f32 = format!("mean_axis1 (f32) (x{}, {} threads)", $multiplier, $nthreads);
+        let name_f64 = format!("mean_axis1 (f64) (x{}, {} threads)", $multiplier, $nthreads);
+        $c.bench_function(&name_f32, |b| {
+            b.iter(|| mean_axis1(black_box($a32), black_box($nthreads)))
+        });
+        $c.bench_function(&name_f64, |b| {
+            b.iter(|| mean_axis1(black_box($a64), black_box($nthreads)))
+        });
         let name_f32 = format!(
             "nanmean_axis1 (f32) (x{}, {} threads)",
             $multiplier, $nthreads
@@ -78,6 +86,14 @@ macro_rules! bench_corr_axis1_full {
     };
 }
 
+fn bench_to_valid_indices(c: &mut Criterion) {
+    let mask = Array1::<bool>::random(239 * 5000, Bernoulli::new(0.5).unwrap());
+    let mask = mask.view();
+    c.bench_function("to_valid_indices", |b| {
+        b.iter(|| to_valid_indices(black_box(mask)))
+    });
+}
+
 fn bench_axis1_ops(c: &mut Criterion) {
     bench_mean_axis1_full!(c, 1);
     bench_mean_axis1_full!(c, 2);
@@ -108,5 +124,10 @@ fn bench_searchsorted(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_axis1_ops, bench_searchsorted);
+criterion_group!(
+    benches,
+    bench_to_valid_indices,
+    bench_axis1_ops,
+    bench_searchsorted,
+);
 criterion_main!(benches);
