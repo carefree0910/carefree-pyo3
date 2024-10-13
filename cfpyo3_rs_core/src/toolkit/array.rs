@@ -1,5 +1,5 @@
 use anyhow::Result;
-use itertools::{enumerate, izip, Itertools};
+use itertools::{izip, Itertools};
 use num_traits::{Float, FromPrimitive};
 use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
 use std::{
@@ -402,26 +402,39 @@ fn masked_coeff<T: AFloat>(
     coeff_with(x, y, convert_valid_indices(valid_mask), q)
 }
 
+// macros
+
+macro_rules! parallel_apply {
+    ($func:expr, $iter:expr, $slice:expr, $num_threads:expr) => {{
+        if $num_threads <= 1 {
+            $iter.enumerate().for_each(|(i, args)| {
+                $slice.set(i, $func(args));
+            });
+        } else {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads($num_threads)
+                .build()
+                .unwrap();
+            pool.scope(|s| {
+                $iter.enumerate().for_each(|(i, args)| {
+                    s.spawn(move |_| $slice.set(i, $func(args)));
+                });
+            });
+        }
+    }};
+}
+
 // axis1 wrappers
 
 pub fn nanmean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
-    if num_threads <= 1 {
-        enumerate(a.rows()).for_each(|(i, row)| {
-            slice.set(i, simd_nanmean(row.as_slice().unwrap()));
-        });
-    } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
-        pool.scope(|s| {
-            enumerate(a.rows()).for_each(|(i, row)| {
-                s.spawn(move |_| slice.set(i, simd_nanmean(row.as_slice().unwrap())));
-            });
-        });
-    }
+    parallel_apply!(
+        |row: ArrayView1<T>| simd_nanmean(row.as_slice().unwrap()),
+        a.rows().into_iter(),
+        slice,
+        num_threads
+    );
     res
 }
 pub fn masked_mean_axis1<T: AFloat>(
@@ -431,42 +444,24 @@ pub fn masked_mean_axis1<T: AFloat>(
 ) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
-    if num_threads <= 1 {
-        enumerate(zip(a.rows(), valid_mask.rows())).for_each(|(i, (row, valid_mask))| {
-            slice.set(i, masked_mean(row, valid_mask));
-        });
-    } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
-        pool.scope(|s| {
-            enumerate(zip(a.rows(), valid_mask.rows())).for_each(|(i, (row, valid_mask))| {
-                s.spawn(move |_| slice.set(i, masked_mean(row, valid_mask)));
-            });
-        });
-    }
+    parallel_apply!(
+        |(row, valid_mask): (ArrayView1<T>, ArrayView1<bool>)| masked_mean(row, valid_mask),
+        zip(a.rows(), valid_mask.rows()),
+        slice,
+        num_threads
+    );
     res
 }
 
 pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
-    if num_threads <= 1 {
-        zip(a.rows(), b.rows()).enumerate().for_each(|(i, (a, b))| {
-            slice.set(i, corr(a, b));
-        });
-    } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
-        pool.scope(move |s| {
-            zip(a.rows(), b.rows()).enumerate().for_each(|(i, (a, b))| {
-                s.spawn(move |_| slice.set(i, corr(a, b)));
-            });
-        });
-    }
+    parallel_apply!(
+        |(a, b): (ArrayView1<T>, ArrayView1<T>)| corr(a, b),
+        zip(a.rows(), b.rows()),
+        slice,
+        num_threads
+    );
     res
 }
 pub fn masked_corr_axis1<T: AFloat>(
@@ -477,25 +472,14 @@ pub fn masked_corr_axis1<T: AFloat>(
 ) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
-    if num_threads <= 1 {
-        izip!(a.rows(), b.rows(), valid_mask.rows())
-            .enumerate()
-            .for_each(|(i, (a, b, valid_mask))| {
-                slice.set(i, masked_corr(a, b, valid_mask));
-            });
-    } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
-        pool.scope(move |s| {
-            izip!(a.rows(), b.rows(), valid_mask.rows())
-                .enumerate()
-                .for_each(|(i, (a, b, valid_mask))| {
-                    s.spawn(move |_| slice.set(i, masked_corr(a, b, valid_mask)));
-                });
-        });
-    }
+    parallel_apply!(
+        |(a, b, valid_mask): (ArrayView1<T>, ArrayView1<T>, ArrayView1<bool>)| masked_corr(
+            a, b, valid_mask
+        ),
+        izip!(a.rows(), b.rows(), valid_mask.rows()),
+        slice,
+        num_threads
+    );
     res
 }
 
