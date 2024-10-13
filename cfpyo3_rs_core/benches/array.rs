@@ -58,11 +58,18 @@ macro_rules! bench_mean_axis1_full {
         bench_mean_axis1!($c, $multiplier, 1, array_f32, array_f64, mask);
         bench_mean_axis1!($c, $multiplier, 2, array_f32, array_f64, mask);
         bench_mean_axis1!($c, $multiplier, 4, array_f32, array_f64, mask);
-        bench_mean_axis1!($c, $multiplier, 8, array_f32, array_f64, mask);
     };
 }
 macro_rules! bench_corr_axis1 {
-    ($c:expr, $multiplier:expr, $nthreads:expr, $a32:expr, $a64:expr) => {{
+    ($c:expr, $multiplier:expr, $nthreads:expr, $a32:expr, $a64:expr, $mask:expr) => {{
+        let name_f32 = format!("corr_axis1 (f32) (x{}, {} threads)", $multiplier, $nthreads);
+        let name_f64 = format!("corr_axis1 (f64) (x{}, {} threads)", $multiplier, $nthreads);
+        $c.bench_function(&name_f32, |b| {
+            b.iter(|| corr_axis1(black_box($a32), black_box($a32), black_box($nthreads)))
+        });
+        $c.bench_function(&name_f64, |b| {
+            b.iter(|| corr_axis1(black_box($a64), black_box($a64), black_box($nthreads)))
+        });
         let name_f32 = format!(
             "nancorr_axis1 (f32) (x{}, {} threads)",
             $multiplier, $nthreads
@@ -77,19 +84,89 @@ macro_rules! bench_corr_axis1 {
         $c.bench_function(&name_f64, |b| {
             b.iter(|| nancorr_axis1(black_box($a64), black_box($a64), black_box($nthreads)))
         });
+        let name_f32 = format!(
+            "masked_corr_axis1 (f32) (x{}, {} threads)",
+            $multiplier, $nthreads
+        );
+        let name_f64 = format!(
+            "masked_corr_axis1 (f64) (x{}, {} threads)",
+            $multiplier, $nthreads
+        );
+        $c.bench_function(&name_f32, |b| {
+            b.iter(|| {
+                masked_corr_axis1(
+                    black_box($a32),
+                    black_box($a32),
+                    black_box($mask),
+                    black_box($nthreads),
+                )
+            })
+        });
+        $c.bench_function(&name_f64, |b| {
+            b.iter(|| {
+                masked_corr_axis1(
+                    black_box($a64),
+                    black_box($a64),
+                    black_box($mask),
+                    black_box($nthreads),
+                )
+            })
+        });
     }};
 }
 macro_rules! bench_corr_axis1_full {
     ($c:expr, $multiplier:expr) => {
         let array_f32 = Array2::<f32>::random((239 * $multiplier, 5000), Uniform::new(0., 1.));
         let array_f64 = Array2::<f64>::random((239 * $multiplier, 5000), Uniform::new(0., 1.));
+        let mask = Array2::<bool>::random((239 * $multiplier, 5000), Bernoulli::new(0.5).unwrap());
         let array_f32 = &array_f32.view();
         let array_f64 = &array_f64.view();
-        bench_corr_axis1!($c, $multiplier, 1, array_f32, array_f64);
-        bench_corr_axis1!($c, $multiplier, 2, array_f32, array_f64);
-        bench_corr_axis1!($c, $multiplier, 4, array_f32, array_f64);
-        bench_corr_axis1!($c, $multiplier, 8, array_f32, array_f64);
+        let mask = &mask.view();
+        bench_corr_axis1!($c, $multiplier, 1, array_f32, array_f64, mask);
+        bench_corr_axis1!($c, $multiplier, 2, array_f32, array_f64, mask);
+        bench_corr_axis1!($c, $multiplier, 4, array_f32, array_f64, mask);
     };
+}
+
+fn bench_simd_ops(c: &mut Criterion) {
+    let array_f32 = Array1::<f32>::random(239 * 5000, Uniform::new(0., 1.));
+    let array_f64 = Array1::<f64>::random(239 * 5000, Uniform::new(0., 1.));
+    let mask = Array1::<bool>::random(239 * 5000, Bernoulli::new(0.5).unwrap());
+    let array_f32 = array_f32.as_slice().unwrap();
+    let array_f64 = array_f64.as_slice().unwrap();
+    let mask = mask.as_slice().unwrap();
+    c.bench_function("sum (f32)", |b| b.iter(|| simd_sum(black_box(array_f32))));
+    c.bench_function("sum (f64)", |b| b.iter(|| simd_sum(black_box(array_f64))));
+    c.bench_function("nanmean (f32)", |b| {
+        b.iter(|| simd_nanmean(black_box(array_f32)))
+    });
+    c.bench_function("nanmean (f64)", |b| {
+        b.iter(|| simd_nanmean(black_box(array_f64)))
+    });
+    c.bench_function("masked_mean (f32)", |b| {
+        b.iter(|| simd_masked_mean(black_box(array_f32), black_box(mask)))
+    });
+    c.bench_function("masked_mean (f64)", |b| {
+        b.iter(|| simd_masked_mean(black_box(array_f64), black_box(mask)))
+    });
+    c.bench_function("subtract (f32)", |b| {
+        b.iter(|| simd_subtract(black_box(array_f32), black_box(0.123)))
+    });
+    c.bench_function("subtract (f64)", |b| {
+        b.iter(|| simd_subtract(black_box(array_f64), black_box(0.123)))
+    });
+    c.bench_function("dot (f32)", |b| {
+        b.iter(|| simd_dot(black_box(array_f32), black_box(array_f32)))
+    });
+    c.bench_function("dot (f64)", |b| {
+        b.iter(|| simd_dot(black_box(array_f64), black_box(array_f64)))
+    });
+    c.bench_function("inner (f32)", |b| {
+        b.iter(|| simd_inner(black_box(array_f32)))
+    });
+    c.bench_function("inner (f64)", |b| {
+        b.iter(|| simd_inner(black_box(array_f64)))
+    });
 }
 
 fn bench_to_valid_indices(c: &mut Criterion) {
@@ -104,11 +181,9 @@ fn bench_axis1_ops(c: &mut Criterion) {
     bench_mean_axis1_full!(c, 1);
     bench_mean_axis1_full!(c, 2);
     bench_mean_axis1_full!(c, 4);
-    bench_mean_axis1_full!(c, 8);
     bench_corr_axis1_full!(c, 1);
     bench_corr_axis1_full!(c, 2);
     bench_corr_axis1_full!(c, 4);
-    bench_corr_axis1_full!(c, 8);
 }
 
 fn bench_searchsorted(c: &mut Criterion) {
@@ -132,6 +207,7 @@ fn bench_searchsorted(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    bench_simd_ops,
     bench_to_valid_indices,
     bench_axis1_ops,
     bench_searchsorted,
