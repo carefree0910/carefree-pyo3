@@ -362,6 +362,61 @@ fn simd_masked_mean<T: AFloat>(a: &[T], valid_mask: &[bool]) -> T {
     reduced[0] / reduced[1]
 }
 
+pub fn simd_subtract<T: AFloat>(a: &[T], n: T) -> Vec<T> {
+    a.iter().map(|&x| x - n).collect()
+}
+pub fn simd_dot<T: AFloat>(a: &[T], b: &[T]) -> T {
+    let a_chunks = a.chunks_exact(LANES);
+    let b_chunks = b.chunks_exact(LANES);
+    let remainder_a = a_chunks.remainder();
+    let remainder_b = b_chunks.remainder();
+    let zip_chunks = zip(a_chunks, b_chunks);
+
+    let sum = zip_chunks
+        .clone()
+        .fold([T::zero(); LANES], |mut acc, (a_chunk, b_chunk)| {
+            let a_chunk: [T; LANES] = a_chunk.try_into().unwrap();
+            let b_chunk: [T; LANES] = b_chunk.try_into().unwrap();
+            (0..LANES).for_each(|i| acc[i] += a_chunk[i] * b_chunk[i]);
+            acc
+        });
+
+    let mut reduced = T::zero();
+    sum.iter().for_each(|&x| reduced += x);
+    zip(remainder_a, remainder_b).for_each(|(&x, &y)| reduced += x * y);
+
+    reduced
+}
+pub fn simd_inner<T: AFloat>(a: &[T]) -> T {
+    let chunks = a.chunks_exact(LANES);
+    let remainder = chunks.remainder();
+
+    let sum = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
+        let chunk: [T; LANES] = chunk.try_into().unwrap();
+        (0..LANES).for_each(|i| acc[i] += chunk[i] * chunk[i]);
+        acc
+    });
+
+    let mut reduced = T::zero();
+    sum.iter().for_each(|&x| reduced += x);
+    remainder.iter().for_each(|&x| reduced += x * x);
+
+    reduced
+}
+
+fn simd_corr<T: AFloat>(a: &[T], b: &[T]) -> T {
+    let a_mean = simd_mean(a);
+    let b_mean = simd_mean(b);
+    let a = simd_subtract(a, a_mean);
+    let b = simd_subtract(b, b_mean);
+    let a = a.as_slice();
+    let b = b.as_slice();
+    let cov = simd_dot(a, b);
+    let var1 = simd_inner(a);
+    let var2 = simd_inner(b);
+    cov / (var1.sqrt() * var2.sqrt())
+}
+
 #[inline]
 fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<usize>) -> T {
     if valid_indices.is_empty() {
@@ -519,6 +574,20 @@ pub fn masked_mean_axis1<T: AFloat>(
     res
 }
 
+pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    parallel_apply!(
+        |(a, b): (ArrayView1<T>, ArrayView1<T>)| simd_corr(
+            a.as_slice().unwrap(),
+            b.as_slice().unwrap()
+        ),
+        zip(a.rows(), b.rows()),
+        slice,
+        num_threads
+    );
+    res
+}
 pub fn nancorr_axis1<T: AFloat>(
     a: &ArrayView2<T>,
     b: &ArrayView2<T>,

@@ -112,6 +112,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
             unary_impl!(mean_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::mean_axis1, 0);
             unary_impl!(nanmean_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::nanmean_axis1);
             masked_unary_impl!(masked_mean_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::masked_mean_axis1);
+            binary_impl!(corr_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::corr_axis1);
             binary_impl!(nancorr_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::nancorr_axis1);
             masked_binary_impl!(masked_corr_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::masked_corr_axis1);
             paste::item! {
@@ -178,6 +179,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
         mean_axis1,
         nanmean_axis1,
         masked_mean_axis1,
+        corr_axis1,
         nancorr_axis1,
         masked_corr_axis1,
         coeff_axis1,

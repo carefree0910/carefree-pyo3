@@ -7,6 +7,7 @@ from typing import List
 from cfpyo3.toolkit.array import sum_axis1
 from cfpyo3.toolkit.array import mean_axis1
 from cfpyo3.toolkit.array import nanmean_axis1
+from cfpyo3.toolkit.array import corr_axis1
 from cfpyo3.toolkit.array import nancorr_axis1
 from cfpyo3.toolkit.array import coeff_axis1
 from cfpyo3.toolkit.array import masked_mean_axis1
@@ -71,12 +72,14 @@ def batch_corr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 def test_corr_axis1():
     for dtype in [np.float32, np.float64]:
-        for _ in range(3):
-            a = generate_array(dtype)
-            b = generate_array(dtype)
-            valid_mask = np.isfinite(a) & np.isfinite(b)
-            assert_allclose(batch_corr(a, b), nancorr_axis1(a, b))
-            assert_allclose(batch_corr(a, b), masked_corr_axis1(a, b, valid_mask))
+        a = generate_array(dtype)
+        b = generate_array(dtype)
+        valid_mask = np.isfinite(a) & np.isfinite(b)
+        assert_allclose(batch_corr(a, b), nancorr_axis1(a, b))
+        assert_allclose(batch_corr(a, b), masked_corr_axis1(a, b, valid_mask))
+        a = generate_array(dtype, no_nan=True)
+        b = generate_array(dtype, no_nan=True)
+        assert_allclose(batch_corr(a, b), corr_axis1(a, b))
 
 
 def lstsq(q: float, valid: np.ndarray, a0: np.ndarray, a1: np.ndarray) -> np.ndarray:

@@ -20,6 +20,16 @@ def masked_mean_axis1_f64(
     valid_mask: np.ndarray,
     num_threads: int = 8,
 ) -> np.ndarray: ...
+def corr_axis1_f32(
+    a: np.ndarray,
+    b: np.ndarray,
+    num_threads: int = 8,
+) -> np.ndarray: ...
+def corr_axis1_f64(
+    a: np.ndarray,
+    b: np.ndarray,
+    num_threads: int = 8,
+) -> np.ndarray: ...
 def nancorr_axis1_f32(
     a: np.ndarray,
     b: np.ndarray,
