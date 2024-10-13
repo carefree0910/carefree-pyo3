@@ -270,6 +270,24 @@ fn solve_2d<T: AFloat>(x: ArrayView2<T>, y: ArrayView1<T>) -> (T, T) {
     (solution[0], solution[1])
 }
 
+fn simd_sum<T: AFloat>(a: &[T]) -> T {
+    let chunks = a.chunks_exact(LANES);
+    let remainder = chunks.remainder();
+
+    let sum = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
+        let chunk: [T; LANES] = chunk.try_into().unwrap();
+        (0..LANES).for_each(|i| acc[i] += chunk[i]);
+        acc
+    });
+
+    let mut reduced = T::zero();
+    sum.iter().for_each(|&x| reduced += x);
+    remainder.iter().for_each(|&x| reduced += x);
+    reduced
+}
+fn simd_mean<T: AFloat>(a: &[T]) -> T {
+    simd_sum(a) / T::from_usize(a.len()).unwrap()
+}
 fn simd_nanmean<T: AFloat>(a: &[T]) -> T {
     let chunks = a.chunks_exact(LANES);
     let remainder = chunks.remainder();
@@ -426,6 +444,28 @@ macro_rules! parallel_apply {
 
 // axis1 wrappers
 
+pub fn sum_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    parallel_apply!(
+        |row: ArrayView1<T>| simd_sum(row.as_slice().unwrap()),
+        a.rows().into_iter(),
+        slice,
+        num_threads
+    );
+    res
+}
+pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
+    let mut res: Vec<T> = vec![T::zero(); a.nrows()];
+    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    parallel_apply!(
+        |row: ArrayView1<T>| simd_mean(row.as_slice().unwrap()),
+        a.rows().into_iter(),
+        slice,
+        num_threads
+    );
+    res
+}
 pub fn nanmean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
