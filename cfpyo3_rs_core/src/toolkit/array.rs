@@ -198,137 +198,76 @@ impl<T> AFloat for T where
 
 const LANES: usize = 16;
 
+macro_rules! simd_unary_reduce {
+    ($a:expr, $a_dtype:ty, $func:expr) => {{
+        let chunks = $a.chunks_exact(LANES);
+        let remainder = chunks.remainder();
+
+        let sum = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
+            let chunk: [$a_dtype; LANES] = chunk.try_into().unwrap();
+            (0..LANES).for_each(|i| acc[i] += $func(chunk[i]));
+            acc
+        });
+
+        let mut reduced = T::zero();
+        sum.iter().for_each(|&x| reduced += x);
+        remainder.iter().for_each(|&x| reduced += $func(x));
+        reduced
+    }};
+    ($a:expr, $func:expr) => {{
+        simd_unary_reduce!($a, T, $func)
+    }};
+}
+macro_rules! simd_binary_reduce {
+    ($a:expr, $b:expr, $b_dtype:ty, $func:expr) => {{
+        let a_chunks = $a.chunks_exact(LANES);
+        let b_chunks = $b.chunks_exact(LANES);
+        let remainder_a = a_chunks.remainder();
+        let remainder_b = b_chunks.remainder();
+        let zip_chunks = zip(a_chunks, b_chunks);
+
+        let sum = zip_chunks.fold([T::zero(); LANES], |mut acc, (a_chunk, b_chunk)| {
+            let a_chunk: [T; LANES] = a_chunk.try_into().unwrap();
+            let b_chunk: [$b_dtype; LANES] = b_chunk.try_into().unwrap();
+            (0..LANES).for_each(|i| acc[i] += $func(a_chunk[i], b_chunk[i]));
+            acc
+        });
+
+        let mut reduced = T::zero();
+        sum.iter().for_each(|&x| reduced += x);
+        zip(remainder_a, remainder_b).for_each(|(&x, &y)| reduced += $func(x, y));
+
+        reduced
+    }};
+    ($a:expr, $b:expr, $func:expr) => {{
+        simd_binary_reduce!($a, $b, T, $func)
+    }};
+}
+
 pub fn simd_sum<T: AFloat>(a: &[T]) -> T {
-    let chunks = a.chunks_exact(LANES);
-    let remainder = chunks.remainder();
-
-    let sum = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
-        let chunk: [T; LANES] = chunk.try_into().unwrap();
-        (0..LANES).for_each(|i| acc[i] += chunk[i]);
-        acc
-    });
-
-    let mut reduced = T::zero();
-    sum.iter().for_each(|&x| reduced += x);
-    remainder.iter().for_each(|&x| reduced += x);
-    reduced
+    simd_unary_reduce!(a, |x| x)
 }
 pub fn simd_mean<T: AFloat>(a: &[T]) -> T {
     simd_sum(a) / T::from_usize(a.len()).unwrap()
 }
 pub fn simd_nanmean<T: AFloat>(a: &[T]) -> T {
-    let chunks = a.chunks_exact(LANES);
-    let remainder = chunks.remainder();
-
-    let sum = chunks.clone().fold([T::zero(); LANES], |mut acc, chunk| {
-        let chunk: [T; LANES] = chunk.try_into().unwrap();
-        (0..LANES).for_each(|i| {
-            let value = chunk[i];
-            acc[i] += if value.is_nan() { T::zero() } else { value };
-        });
-        acc
-    });
-    let num = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
-        let chunk: [T; LANES] = chunk.try_into().unwrap();
-        (0..LANES).for_each(|i| {
-            let value = chunk[i];
-            acc[i] += if value.is_nan() { T::zero() } else { T::one() };
-        });
-        acc
-    });
-
-    let mut reduced = [T::zero(), T::zero()];
-    (0..LANES).for_each(|i| {
-        reduced[0] += sum[i];
-        reduced[1] += num[i];
-    });
-
-    remainder.iter().for_each(|&x| {
-        reduced[0] += if x.is_nan() { T::zero() } else { x };
-        reduced[1] += if x.is_nan() { T::zero() } else { T::one() };
-    });
-
-    reduced[0] / reduced[1]
+    let sum = simd_unary_reduce!(a, |x: T| if x.is_nan() { T::zero() } else { x });
+    let num = simd_unary_reduce!(a, |x: T| if x.is_nan() { T::zero() } else { T::one() });
+    sum / num
 }
 pub fn simd_masked_mean<T: AFloat>(a: &[T], valid_mask: &[bool]) -> T {
-    let chunks = a.chunks_exact(LANES);
-    let mask_chunks = valid_mask.chunks_exact(LANES);
-    let remainder = chunks.remainder();
-    let mask_remainder = mask_chunks.remainder();
-    let zip_chunks = zip(chunks, mask_chunks);
-
-    let sum = zip_chunks
-        .clone()
-        .fold([T::zero(); LANES], |mut acc, (chunk, mask_chunk)| {
-            let chunk: [T; LANES] = chunk.try_into().unwrap();
-            let mask_chunk: [bool; LANES] = mask_chunk.try_into().unwrap();
-            (0..LANES).for_each(|i| {
-                let value = chunk[i];
-                acc[i] += if mask_chunk[i] { value } else { T::zero() };
-            });
-            acc
-        });
-    let num = zip_chunks.fold([T::zero(); LANES], |mut acc, (_, mask_chunk)| {
-        let mask_chunk: [bool; LANES] = mask_chunk.try_into().unwrap();
-        (0..LANES).for_each(|i| {
-            acc[i] += if mask_chunk[i] { T::one() } else { T::zero() };
-        });
-        acc
-    });
-
-    let mut reduced = [T::zero(), T::zero()];
-    (0..LANES).for_each(|i| {
-        reduced[0] += sum[i];
-        reduced[1] += num[i];
-    });
-
-    zip(remainder, mask_remainder).for_each(|(&x, &mask)| {
-        reduced[0] += if mask { x } else { T::zero() };
-        reduced[1] += if mask { T::one() } else { T::zero() };
-    });
-
-    reduced[0] / reduced[1]
+    let sum = simd_binary_reduce!(a, valid_mask, bool, |x, y| if y { x } else { T::zero() });
+    let num = simd_unary_reduce!(valid_mask, bool, |x| if x { T::one() } else { T::zero() });
+    sum / num
 }
 pub fn simd_subtract<T: AFloat>(a: &[T], n: T) -> Vec<T> {
     a.iter().map(|&x| x - n).collect()
 }
 pub fn simd_dot<T: AFloat>(a: &[T], b: &[T]) -> T {
-    let a_chunks = a.chunks_exact(LANES);
-    let b_chunks = b.chunks_exact(LANES);
-    let remainder_a = a_chunks.remainder();
-    let remainder_b = b_chunks.remainder();
-    let zip_chunks = zip(a_chunks, b_chunks);
-
-    let sum = zip_chunks
-        .clone()
-        .fold([T::zero(); LANES], |mut acc, (a_chunk, b_chunk)| {
-            let a_chunk: [T; LANES] = a_chunk.try_into().unwrap();
-            let b_chunk: [T; LANES] = b_chunk.try_into().unwrap();
-            (0..LANES).for_each(|i| acc[i] += a_chunk[i] * b_chunk[i]);
-            acc
-        });
-
-    let mut reduced = T::zero();
-    sum.iter().for_each(|&x| reduced += x);
-    zip(remainder_a, remainder_b).for_each(|(&x, &y)| reduced += x * y);
-
-    reduced
+    simd_binary_reduce!(a, b, |x, y| x * y)
 }
 pub fn simd_inner<T: AFloat>(a: &[T]) -> T {
-    let chunks = a.chunks_exact(LANES);
-    let remainder = chunks.remainder();
-
-    let sum = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
-        let chunk: [T; LANES] = chunk.try_into().unwrap();
-        (0..LANES).for_each(|i| acc[i] += chunk[i] * chunk[i]);
-        acc
-    });
-
-    let mut reduced = T::zero();
-    sum.iter().for_each(|&x| reduced += x);
-    remainder.iter().for_each(|&x| reduced += x * x);
-
-    reduced
+    simd_unary_reduce!(a, |x| x * x)
 }
 
 // ops
