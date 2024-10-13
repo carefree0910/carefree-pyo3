@@ -243,6 +243,39 @@ macro_rules! simd_binary_reduce {
         simd_binary_reduce!($a, $b, T, $func)
     }};
 }
+macro_rules! simd_ternary_reduce {
+    ($a:expr, $b:expr, $c:expr, $c_dtype:ty, $func:expr) => {{
+        let a_chunks = $a.chunks_exact(LANES);
+        let b_chunks = $b.chunks_exact(LANES);
+        let c_chunks = $c.chunks_exact(LANES);
+        let remainder_a = a_chunks.remainder();
+        let remainder_b = b_chunks.remainder();
+        let remainder_c = c_chunks.remainder();
+        let zip_chunks = izip!(a_chunks, b_chunks, c_chunks);
+
+        let sum = zip_chunks.fold(
+            [T::zero(); LANES],
+            |mut acc, (a_chunk, b_chunk, c_chunk)| {
+                let a_chunk: [T; LANES] = a_chunk.try_into().unwrap();
+                let b_chunk: [T; LANES] = b_chunk.try_into().unwrap();
+                let c_chunk: [$c_dtype; LANES] = c_chunk.try_into().unwrap();
+                (0..LANES).for_each(|i| acc[i] += $func(a_chunk[i], b_chunk[i], c_chunk[i]));
+                acc
+            },
+        );
+
+        let mut reduced = T::zero();
+        sum.iter().for_each(|&x| reduced += x);
+        izip!(remainder_a, remainder_b, remainder_c).for_each(|(&x, &y, &z)| {
+            reduced += $func(x, y, z);
+        });
+
+        reduced
+    }};
+    ($a:expr, $b:expr, $c:expr, $func:expr) => {{
+        simd_ternary_reduce!($a, $b, $c, T, $func)
+    }};
+}
 
 pub fn simd_sum<T: AFloat>(a: &[T]) -> T {
     simd_unary_reduce!(a, |x| x)
@@ -398,25 +431,35 @@ fn simd_nancorr<T: AFloat>(a: &[T], b: &[T]) -> T {
     });
     cov / (var1.sqrt() * var2.sqrt())
 }
-
-#[inline]
-fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<usize>) -> T {
-    if valid_indices.is_empty() {
+fn simd_masked_corr<T: AFloat>(a: &[T], b: &[T], valid_mask: &[bool]) -> T {
+    let num = simd_unary_reduce!(valid_mask, bool, |x| if x { T::one() } else { T::zero() });
+    if num == T::zero() || num == T::one() {
         return T::nan();
     }
-    let a = a.select(Axis(0), &valid_indices);
-    let b = b.select(Axis(0), &valid_indices);
-    let a_mean = a.mean().unwrap();
-    let b_mean = b.mean().unwrap();
-    let a = a - a_mean;
-    let b = b - b_mean;
-    let cov = a.dot(&b);
-    let var1 = a.dot(&a);
-    let var2 = b.dot(&b);
+    let a_sum = simd_binary_reduce!(a, valid_mask, bool, |x, y| if y { x } else { T::zero() });
+    let b_sum = simd_binary_reduce!(b, valid_mask, bool, |x, y| if y { x } else { T::zero() });
+    let a_mean = a_sum / num;
+    let b_mean = b_sum / num;
+    let a = simd_subtract(a, a_mean);
+    let b = simd_subtract(b, b_mean);
+    let a = a.as_slice();
+    let b = b.as_slice();
+    let cov = simd_ternary_reduce!(a, b, valid_mask, bool, |x, y, z| if z {
+        x * y
+    } else {
+        T::zero()
+    });
+    let var1 = simd_binary_reduce!(a, valid_mask, bool, |x, y| if y {
+        x * x
+    } else {
+        T::zero()
+    });
+    let var2 = simd_binary_reduce!(b, valid_mask, bool, |x, y| if y {
+        x * x
+    } else {
+        T::zero()
+    });
     cov / (var1.sqrt() * var2.sqrt())
-}
-fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
-    corr_with(a, b, to_valid_indices(valid_mask))
 }
 
 #[inline]
@@ -594,8 +637,10 @@ pub fn masked_corr_axis1<T: AFloat>(
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     parallel_apply!(
-        |(a, b, valid_mask): (ArrayView1<T>, ArrayView1<T>, ArrayView1<bool>)| masked_corr(
-            a, b, valid_mask
+        |(a, b, valid_mask): (ArrayView1<T>, ArrayView1<T>, ArrayView1<bool>)| simd_masked_corr(
+            a.as_slice().unwrap(),
+            b.as_slice().unwrap(),
+            valid_mask.as_slice().unwrap()
         ),
         izip!(a.rows(), b.rows(), valid_mask.rows()),
         slice,
