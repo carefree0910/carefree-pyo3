@@ -7,7 +7,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         nanmean_axis1(&self.values.view(), num_threads)
     }
 
-    pub fn corr_with_axis1(&'a self, other: ArrayView2<T>, num_threads: usize) -> Vec<T> {
+    pub fn nancorr_with_axis1(&'a self, other: ArrayView2<T>, num_threads: usize) -> Vec<T> {
         nancorr_axis1(&self.values.view(), &other.view(), num_threads)
     }
 }

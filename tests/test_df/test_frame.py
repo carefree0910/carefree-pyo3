@@ -70,9 +70,9 @@ def test_corr():
         df1 = get_random_pandas_df()
         df_rs0 = DataFrame.from_pandas(df0)
         c0 = df0.corrwith(df1, axis=1).values
-        c1 = df_rs0.corr_with_axis1(df1)
-        c2 = df_rs0.corr_with_axis1(df1.values)
-        c3 = df_rs0.corr_with_axis1(DataFrame.from_pandas(df1))
+        c1 = df_rs0.nancorr_with_axis1(df1)
+        c2 = df_rs0.nancorr_with_axis1(df1.values)
+        c3 = df_rs0.nancorr_with_axis1(DataFrame.from_pandas(df1))
         np.testing.assert_allclose(c0, c1)
         np.testing.assert_allclose(c0, c2)
         np.testing.assert_allclose(c0, c3)

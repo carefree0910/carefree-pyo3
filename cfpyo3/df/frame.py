@@ -111,8 +111,8 @@ class DataFrame:
     def nanmean_axis1(self) -> "np.ndarray":
         return self._df.nanmean_axis1()
 
-    def corr_with_axis1(self, other: RHS) -> "np.ndarray":
-        return self._df.corr_with_axis1(rhs_to_np(other))
+    def nancorr_with_axis1(self, other: RHS) -> "np.ndarray":
+        return self._df.nancorr_with_axis1(rhs_to_np(other))
 
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd

@@ -7,14 +7,14 @@ pub trait Ops: WithCore {
         self.to_core(py).nanmean_axis1(8).into_pyarray_bound(py)
     }
 
-    fn corr_with_axis1<'py>(
+    fn nancorr_with_axis1<'py>(
         &'py self,
         py: Python<'py>,
         other: PyReadonlyArray2<f64>,
     ) -> Bound<'py, PyArray1<f64>> {
         let other = other.as_array();
         self.to_core(py)
-            .corr_with_axis1(other, 8)
+            .nancorr_with_axis1(other, 8)
             .into_pyarray_bound(py)
     }
 }
@@ -28,12 +28,12 @@ macro_rules! ops_bindings_impl {
             fn nanmean_axis1<'py>(&'py self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
                 Ops::nanmean_axis1(self, py)
             }
-            fn corr_with_axis1<'py>(
+            fn nancorr_with_axis1<'py>(
                 &'py self,
                 py: Python<'py>,
                 other: PyReadonlyArray2<f64>,
             ) -> Bound<'py, PyArray1<f64>> {
-                Ops::corr_with_axis1(self, py, other)
+                Ops::nancorr_with_axis1(self, py, other)
             }
         }
     };
