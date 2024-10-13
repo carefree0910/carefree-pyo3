@@ -18,88 +18,102 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     misc_module.add_function(wrap_pyfunction!(toolkit::misc::hash_code, &misc_module)?)?;
 
     let array_module = register_submodule!(toolkit_module, "cfpyo3._rs.toolkit.array");
+
+    macro_rules! unary_impl {
+        ($name:ident, $type_str:ident, $dtype:ty, $func:expr) => {
+            paste::item! {
+                #[pyfunction]
+                pub fn [< $name _ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let num_threads = num_threads.unwrap_or(8);
+                    $func(&a, num_threads).into_pyarray_bound(py)
+                }
+            }
+        };
+        ($name:ident, $type_str:ident, $dtype:ty, $func:expr, $default_num_threads:expr) => {
+            paste::item! {
+                #[pyfunction]
+                pub fn [< $name _ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let num_threads = num_threads.unwrap_or($default_num_threads);
+                    $func(&a, num_threads).into_pyarray_bound(py)
+                }
+            }
+        };
+    }
+    macro_rules! binary_impl {
+        ($name:ident, $type_str:ident, $dtype:ty, $func:expr) => {
+            paste::item! {
+                #[pyfunction]
+                pub fn [< $name _ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    b: PyReadonlyArray2<$dtype>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let b = b.as_array();
+                    let num_threads = num_threads.unwrap_or(8);
+                    $func(&a, &b, num_threads).into_pyarray_bound(py)
+                }
+            }
+        };
+    }
+    macro_rules! masked_unary_impl {
+        ($name:ident, $type_str:ident, $dtype:ty, $func:expr) => {
+            paste::item! {
+                #[pyfunction]
+                pub fn [< $name _ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    valid_mask: PyReadonlyArray2<bool>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let valid_mask = valid_mask.as_array();
+                    let num_threads = num_threads.unwrap_or(8);
+                    $func(&a, &valid_mask, num_threads).into_pyarray_bound(py)
+                }
+            }
+        };
+    }
+    macro_rules! masked_binary_impl {
+        ($name:ident, $type_str:ident, $dtype:ty, $func:expr) => {
+            paste::item! {
+                #[pyfunction]
+                pub fn [< $name _ $type_str >]<'py>(
+                    py: Python<'py>,
+                    a: PyReadonlyArray2<$dtype>,
+                    b: PyReadonlyArray2<$dtype>,
+                    valid_mask: PyReadonlyArray2<bool>,
+                    num_threads: Option<usize>,
+                ) -> Bound<'py, PyArray1<$dtype>> {
+                    let a = a.as_array();
+                    let b = b.as_array();
+                    let valid_mask = valid_mask.as_array();
+                    let num_threads = num_threads.unwrap_or(8);
+                    $func(&a, &b, &valid_mask, num_threads).into_pyarray_bound(py)
+                }
+            }
+        };
+    }
+
     macro_rules! array_ops_impl {
         ($type_str:ident, $dtype:ty) => {
-            paste::item! {
-                #[pyfunction]
-                pub fn [< sum_axis1_ $type_str >]<'py>(
-                    py: Python<'py>,
-                    a: PyReadonlyArray2<$dtype>,
-                    num_threads: Option<usize>,
-                ) -> Bound<'py, PyArray1<$dtype>> {
-                    let a = a.as_array();
-                    let num_threads = num_threads.unwrap_or(0);
-                    cfpyo3_core::toolkit::array::sum_axis1(&a, num_threads).into_pyarray_bound(py)
-                }
-            }
-            paste::item! {
-                #[pyfunction]
-                pub fn [< mean_axis1_ $type_str >]<'py>(
-                    py: Python<'py>,
-                    a: PyReadonlyArray2<$dtype>,
-                    num_threads: Option<usize>,
-                ) -> Bound<'py, PyArray1<$dtype>> {
-                    let a = a.as_array();
-                    let num_threads = num_threads.unwrap_or(0);
-                    cfpyo3_core::toolkit::array::mean_axis1(&a, num_threads).into_pyarray_bound(py)
-                }
-            }
-            paste::item! {
-                #[pyfunction]
-                pub fn [< nanmean_axis1_ $type_str >]<'py>(
-                    py: Python<'py>,
-                    a: PyReadonlyArray2<$dtype>,
-                    num_threads: Option<usize>,
-                ) -> Bound<'py, PyArray1<$dtype>> {
-                    let a = a.as_array();
-                    let num_threads = num_threads.unwrap_or(8);
-                    cfpyo3_core::toolkit::array::nanmean_axis1(&a, num_threads).into_pyarray_bound(py)
-                }
-            }
-            paste::item! {
-                #[pyfunction]
-                pub fn [< masked_mean_axis1_ $type_str >]<'py>(
-                    py: Python<'py>,
-                    a: PyReadonlyArray2<$dtype>,
-                    valid_mask: PyReadonlyArray2<bool>,
-                    num_threads: Option<usize>,
-                ) -> Bound<'py, PyArray1<$dtype>> {
-                    let a = a.as_array();
-                    let valid_mask = valid_mask.as_array();
-                    let num_threads = num_threads.unwrap_or(8);
-                    cfpyo3_core::toolkit::array::masked_mean_axis1(&a, &valid_mask, num_threads).into_pyarray_bound(py)
-                }
-            }
-            paste::item! {
-                #[pyfunction]
-                pub fn [< corr_axis1_ $type_str >]<'py>(
-                    py: Python<'py>,
-                    a: PyReadonlyArray2<$dtype>,
-                    b: PyReadonlyArray2<$dtype>,
-                    num_threads: Option<usize>,
-                ) -> Bound<'py, PyArray1<$dtype>> {
-                    let a = a.as_array();
-                    let b = b.as_array();
-                    let num_threads = num_threads.unwrap_or(8);
-                    cfpyo3_core::toolkit::array::corr_axis1(&a, &b, num_threads).into_pyarray_bound(py)
-                }
-            }
-            paste::item! {
-                #[pyfunction]
-                pub fn [< masked_corr_axis1_ $type_str >]<'py>(
-                    py: Python<'py>,
-                    a: PyReadonlyArray2<$dtype>,
-                    b: PyReadonlyArray2<$dtype>,
-                    valid_mask: PyReadonlyArray2<bool>,
-                    num_threads: Option<usize>,
-                ) -> Bound<'py, PyArray1<$dtype>> {
-                    let a = a.as_array();
-                    let b = b.as_array();
-                    let valid_mask = valid_mask.as_array();
-                    let num_threads = num_threads.unwrap_or(8);
-                    cfpyo3_core::toolkit::array::masked_corr_axis1(&a, &b, &valid_mask, num_threads).into_pyarray_bound(py)
-                }
-            }
+            unary_impl!(sum_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::sum_axis1, 0);
+            unary_impl!(mean_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::mean_axis1, 0);
+            unary_impl!(nanmean_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::nanmean_axis1);
+            masked_unary_impl!(masked_mean_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::masked_mean_axis1);
+            binary_impl!(corr_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::corr_axis1);
+            masked_binary_impl!(masked_corr_axis1, $type_str, $dtype, cfpyo3_core::toolkit::array::masked_corr_axis1);
             paste::item! {
                 #[pyfunction]
                 pub fn [< coeff_axis1_ $type_str >]<'py>(
@@ -148,24 +162,28 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     array_ops_impl!(f32, f32);
     array_ops_impl!(f64, f64);
-    array_module.add_function(wrap_pyfunction!(sum_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(sum_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(mean_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(mean_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(nanmean_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(nanmean_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(masked_mean_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(masked_mean_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(corr_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(corr_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(masked_corr_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(masked_corr_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(coeff_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(coeff_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(masked_coeff_axis1_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(masked_coeff_axis1_f64, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(fast_concat_2d_axis0_f32, &array_module)?)?;
-    array_module.add_function(wrap_pyfunction!(fast_concat_2d_axis0_f64, &array_module)?)?;
+
+    macro_rules! register_functions {
+        ($($func:ident),*) => {
+            $(
+                paste::item! {
+                    array_module.add_function(wrap_pyfunction!([< $func _f32 >], &array_module)?)?;
+                    array_module.add_function(wrap_pyfunction!([< $func _f64 >], &array_module)?)?;
+                }
+            )*
+        };
+    }
+    register_functions!(
+        sum_axis1,
+        mean_axis1,
+        nanmean_axis1,
+        masked_mean_axis1,
+        corr_axis1,
+        masked_corr_axis1,
+        coeff_axis1,
+        masked_coeff_axis1,
+        fast_concat_2d_axis0
+    );
 
     Ok(())
 }
