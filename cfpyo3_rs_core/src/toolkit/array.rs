@@ -212,7 +212,7 @@ fn get_valid_indices<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> Vec<usize
         .collect()
 }
 #[inline]
-fn convert_valid_indices(valid_mask: ArrayView1<bool>) -> Vec<usize> {
+pub fn to_valid_indices(valid_mask: ArrayView1<bool>) -> Vec<usize> {
     valid_mask
         .iter()
         .enumerate()
@@ -382,7 +382,7 @@ fn corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
     corr_with(a, b, get_valid_indices(a, b))
 }
 fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
-    corr_with(a, b, convert_valid_indices(valid_mask))
+    corr_with(a, b, to_valid_indices(valid_mask))
 }
 
 #[inline]
@@ -440,7 +440,7 @@ fn masked_coeff<T: AFloat>(
     valid_mask: ArrayView1<bool>,
     q: Option<T>,
 ) -> (T, T) {
-    coeff_with(x, y, convert_valid_indices(valid_mask), q)
+    coeff_with(x, y, to_valid_indices(valid_mask), q)
 }
 
 // macros
