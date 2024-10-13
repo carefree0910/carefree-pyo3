@@ -78,7 +78,7 @@ def mean_axis1(array: "np.ndarray", num_threads: int = 0) -> "np.ndarray":
     )
 
 
-def nanmean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
+def nanmean_axis1(array: "np.ndarray", num_threads: int = 4) -> "np.ndarray":
     return _dispatch(
         "nanmean_axis1",
         nanmean_axis1_f32,
@@ -92,7 +92,7 @@ def nanmean_axis1(array: "np.ndarray", num_threads: int = 8) -> "np.ndarray":
 def masked_mean_axis1(
     array: "np.ndarray",
     mask: "np.ndarray",
-    num_threads: int = 8,
+    num_threads: int = 4,
 ) -> "np.ndarray":
     return _dispatch(
         "masked_mean_axis1",
@@ -118,7 +118,7 @@ def corr_axis1(a: "np.ndarray", b: "np.ndarray", num_threads: int = 0) -> "np.nd
 
 
 def nancorr_axis1(
-    a: "np.ndarray", b: "np.ndarray", num_threads: int = 8
+    a: "np.ndarray", b: "np.ndarray", num_threads: int = 4
 ) -> "np.ndarray":
     return _dispatch(
         "nancorr_axis1",
@@ -135,7 +135,7 @@ def masked_corr_axis1(
     a: "np.ndarray",
     b: "np.ndarray",
     mask: "np.ndarray",
-    num_threads: int = 8,
+    num_threads: int = 4,
 ) -> "np.ndarray":
     return _dispatch(
         "masked_corr_axis1",
