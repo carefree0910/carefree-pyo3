@@ -356,6 +356,48 @@ fn simd_corr<T: AFloat>(a: &[T], b: &[T]) -> T {
     let var2 = simd_inner(b);
     cov / (var1.sqrt() * var2.sqrt())
 }
+fn simd_nancorr<T: AFloat>(a: &[T], b: &[T]) -> T {
+    let num = simd_binary_reduce!(a, b, |x: T, y: T| if x.is_nan() || y.is_nan() {
+        T::zero()
+    } else {
+        T::one()
+    });
+    if num == T::zero() || num == T::one() {
+        return T::nan();
+    }
+    let a_sum = simd_binary_reduce!(a, b, |x: T, y: T| if x.is_nan() || y.is_nan() {
+        T::zero()
+    } else {
+        x
+    });
+    let b_sum = simd_binary_reduce!(a, b, |x: T, y: T| if x.is_nan() || y.is_nan() {
+        T::zero()
+    } else {
+        y
+    });
+    let a_mean = a_sum / num;
+    let b_mean = b_sum / num;
+    let a = simd_subtract(a, a_mean);
+    let b = simd_subtract(b, b_mean);
+    let a = a.as_slice();
+    let b = b.as_slice();
+    let cov = simd_binary_reduce!(a, b, |x: T, y: T| if x.is_nan() || y.is_nan() {
+        T::zero()
+    } else {
+        x * y
+    });
+    let var1 = simd_binary_reduce!(a, b, |x: T, y: T| if x.is_nan() || y.is_nan() {
+        T::zero()
+    } else {
+        x * x
+    });
+    let var2 = simd_binary_reduce!(a, b, |x: T, y: T| if x.is_nan() || y.is_nan() {
+        T::zero()
+    } else {
+        y * y
+    });
+    cov / (var1.sqrt() * var2.sqrt())
+}
 
 #[inline]
 fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<usize>) -> T {
@@ -372,9 +414,6 @@ fn corr_with<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_indices: Vec<u
     let var1 = a.dot(&a);
     let var2 = b.dot(&b);
     cov / (var1.sqrt() * var2.sqrt())
-}
-fn nancorr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>) -> T {
-    corr_with(a, b, get_valid_indices(a, b))
 }
 fn masked_corr<T: AFloat>(a: ArrayView1<T>, b: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
     corr_with(a, b, to_valid_indices(valid_mask))
@@ -536,7 +575,10 @@ pub fn nancorr_axis1<T: AFloat>(
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     parallel_apply!(
-        |(a, b): (ArrayView1<T>, ArrayView1<T>)| nancorr(a, b),
+        |(a, b): (ArrayView1<T>, ArrayView1<T>)| simd_nancorr(
+            a.as_slice().unwrap(),
+            b.as_slice().unwrap()
+        ),
         zip(a.rows(), b.rows()),
         slice,
         num_threads
