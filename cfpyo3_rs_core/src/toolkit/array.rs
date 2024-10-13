@@ -322,21 +322,44 @@ fn simd_nanmean<T: AFloat>(a: &[T]) -> T {
 
     reduced[0] / reduced[1]
 }
-fn masked_mean<T: AFloat>(a: ArrayView1<T>, valid_mask: ArrayView1<bool>) -> T {
-    let mut sum = T::zero();
-    let mut num = T::zero();
-    for (&x, &valid) in zip(a.iter(), valid_mask.iter()) {
-        if !valid {
-            continue;
-        }
-        sum += x;
-        num += T::one();
-    }
-    if num.is_zero() {
-        T::nan()
-    } else {
-        sum / num
-    }
+fn simd_masked_mean<T: AFloat>(a: &[T], valid_mask: &[bool]) -> T {
+    let chunks = a.chunks_exact(LANES);
+    let mask_chunks = valid_mask.chunks_exact(LANES);
+    let remainder = chunks.remainder();
+    let mask_remainder = mask_chunks.remainder();
+    let zip_chunks = zip(chunks, mask_chunks);
+
+    let sum = zip_chunks
+        .clone()
+        .fold([T::zero(); LANES], |mut acc, (chunk, mask_chunk)| {
+            let chunk: [T; LANES] = chunk.try_into().unwrap();
+            let mask_chunk: [bool; LANES] = mask_chunk.try_into().unwrap();
+            (0..LANES).for_each(|i| {
+                let value = chunk[i];
+                acc[i] += if mask_chunk[i] { value } else { T::zero() };
+            });
+            acc
+        });
+    let num = zip_chunks.fold([T::zero(); LANES], |mut acc, (_, mask_chunk)| {
+        let mask_chunk: [bool; LANES] = mask_chunk.try_into().unwrap();
+        (0..LANES).for_each(|i| {
+            acc[i] += if mask_chunk[i] { T::one() } else { T::zero() };
+        });
+        acc
+    });
+
+    let mut reduced = [T::zero(), T::zero()];
+    (0..LANES).for_each(|i| {
+        reduced[0] += sum[i];
+        reduced[1] += num[i];
+    });
+
+    zip(remainder, mask_remainder).for_each(|(&x, &mask)| {
+        reduced[0] += if mask { x } else { T::zero() };
+        reduced[1] += if mask { T::one() } else { T::zero() };
+    });
+
+    reduced[0] / reduced[1]
 }
 
 #[inline]
@@ -485,7 +508,10 @@ pub fn masked_mean_axis1<T: AFloat>(
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
     let mut slice = UnsafeSlice::new(res.as_mut_slice());
     parallel_apply!(
-        |(row, valid_mask): (ArrayView1<T>, ArrayView1<bool>)| masked_mean(row, valid_mask),
+        |(row, valid_mask): (ArrayView1<T>, ArrayView1<bool>)| simd_masked_mean(
+            row.as_slice().unwrap(),
+            valid_mask.as_slice().unwrap()
+        ),
         zip(a.rows(), valid_mask.rows()),
         slice,
         num_threads
