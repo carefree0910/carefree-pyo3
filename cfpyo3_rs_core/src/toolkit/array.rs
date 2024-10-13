@@ -289,10 +289,10 @@ fn simd_mean<T: AFloat>(a: &[T]) -> T {
     simd_sum(a) / T::from_usize(a.len()).unwrap()
 }
 fn simd_nanmean<T: AFloat>(a: &[T]) -> T {
-    let chunks = a.chunks_exact(LANES);
+    let mut chunks = a.chunks_exact(LANES);
     let remainder = chunks.remainder();
 
-    let sum = chunks.clone().fold([T::zero(); LANES], |mut acc, chunk| {
+    let sum = chunks.by_ref().fold([T::zero(); LANES], |mut acc, chunk| {
         let chunk: [T; LANES] = chunk.try_into().unwrap();
         (0..LANES).for_each(|i| {
             let value = chunk[i];
@@ -300,7 +300,7 @@ fn simd_nanmean<T: AFloat>(a: &[T]) -> T {
         });
         acc
     });
-    let num = chunks.fold([T::zero(); LANES], |mut acc, chunk| {
+    let num = chunks.by_ref().fold([T::zero(); LANES], |mut acc, chunk| {
         let chunk: [T; LANES] = chunk.try_into().unwrap();
         (0..LANES).for_each(|i| {
             let value = chunk[i];
