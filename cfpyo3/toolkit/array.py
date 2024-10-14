@@ -220,9 +220,12 @@ def fast_concat_dfs_axis0(
 
 
 __all__ = [
+    "sum_axis1",
+    "mean_axis1",
     "nanmean_axis1",
     "masked_mean_axis1",
     "corr_axis1",
+    "nancorr_axis1",
     "masked_corr_axis1",
     "coeff_axis1",
     "masked_coeff_axis1",
