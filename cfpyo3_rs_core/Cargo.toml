@@ -48,10 +48,14 @@ io-mem-redis = [
 bench-io-mem-redis = [
     "io-mem-redis",
 ]
+async-queue = [
+    "dep:tokio",
+]
 
 full = [
     "io-source-opendal",
     "io-mem-redis",
+    "async-queue",
 ]
 bench-full = [
     "full",
