@@ -6,6 +6,7 @@ use crate::toolkit::{
     convert::{from_bytes, to_nbytes},
 };
 use anyhow::{anyhow, Context, Result};
+use itertools::Itertools;
 use numpy::{
     ndarray::{Array1, ArrayView1, CowArray},
     Ix1, PyFixedString,
@@ -94,7 +95,7 @@ impl<T: AFloat> RedisClient<T> {
             self.cluster = Some(init_client(urls)?);
         }
         if reconnect || self.conn_pool.is_none() {
-            self.conn_pool = Some((0..pool_size).map(|_| None).collect::<Vec<_>>());
+            self.conn_pool = Some((0..pool_size).map(|_| None).collect_vec());
             #[cfg(feature = "bench-io-mem-redis")]
             {
                 self.trackers = Trackers::new(pool_size);

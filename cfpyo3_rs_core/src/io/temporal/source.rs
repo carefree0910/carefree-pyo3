@@ -1,6 +1,6 @@
 use crate::{df::DataFrame, toolkit::array::AFloat};
 use anyhow::Result;
-use itertools::izip;
+use itertools::{izip, Itertools};
 use std::{future::Future, iter::zip};
 
 #[cfg(feature = "io-source-opendal")]
@@ -19,7 +19,7 @@ pub trait Source<T: AFloat> {
     ) -> impl Future<Output = Result<Vec<DataFrame<T>>>> {
         let futures = zip(dates, keys)
             .map(|(date, key)| self.read(date, key))
-            .collect::<Vec<_>>();
+            .collect_vec();
         futures::future::try_join_all(futures)
     }
     /// batch version of `write`
@@ -31,7 +31,7 @@ pub trait Source<T: AFloat> {
     ) -> impl Future<Output = Result<Vec<()>>> {
         let futures = izip!(dates, keys, dfs)
             .map(|(date, key, df)| self.write(date, key, df))
-            .collect::<Vec<_>>();
+            .collect_vec();
         futures::future::try_join_all(futures)
     }
 }

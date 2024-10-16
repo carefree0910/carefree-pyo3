@@ -1297,6 +1297,7 @@ mod tests {
     use crate::df::COLUMNS_NBYTES;
 
     use super::*;
+    use itertools::Itertools;
     use numpy::ndarray::prelude::*;
 
     fn to_columns_array(columns: Array1<i32>) -> Array1<ColumnsDtype> {
@@ -1553,8 +1554,8 @@ mod tests {
             Array::from_iter((18..30).map(|x| x as f32)),
             Array::from_iter((30..44).map(|x| x as f32)),
         ];
-        let sliced_data = sliced_data.iter().map(|x| x.view()).collect::<Vec<_>>();
-        let sliced_data = sliced_data.iter().collect::<Vec<_>>();
+        let sliced_data = sliced_data.iter().map(|x| x.view()).collect_vec();
+        let sliced_data = sliced_data.iter().collect_vec();
 
         let flattened = shm_sliced_column_contiguous(
             datetime_start,
