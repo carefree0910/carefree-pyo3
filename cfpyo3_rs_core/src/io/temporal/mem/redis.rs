@@ -265,11 +265,11 @@ impl<T: AFloat> Default for RedisClient<T> {
 ///   - it can, however, be either row-contiguous or column-contiguous
 pub struct RedisFetcher<'a, T: AFloat> {
     client: &'a RedisClient<T>,
-    pub redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
+    pub redis_keys: &'a [ArrayView1<'a, RedisKey>],
 }
 
 impl<'a, T: AFloat> RedisFetcher<'a, T> {
-    pub fn new(client: &'a RedisClient<T>, redis_keys: &'a [&'a ArrayView1<'a, RedisKey>]) -> Self {
+    pub fn new(client: &'a RedisClient<T>, redis_keys: &'a [ArrayView1<'a, RedisKey>]) -> Self {
         Self { client, redis_keys }
     }
 }
@@ -316,14 +316,14 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
 pub struct RedisGroupedFetcher<'a, T: AFloat> {
     client: &'a RedisClient<T>,
     pub multiplier: i64,
-    pub redis_keys: &'a ArrayView1<'a, RedisKey>,
+    pub redis_keys: ArrayView1<'a, RedisKey>,
 }
 
 impl<'a, T: AFloat> RedisGroupedFetcher<'a, T> {
     pub fn new(
         client: &'a RedisClient<T>,
         multiplier: i64,
-        redis_keys: &'a ArrayView1<'a, RedisKey>,
+        redis_keys: ArrayView1<'a, RedisKey>,
     ) -> Self {
         Self {
             client,

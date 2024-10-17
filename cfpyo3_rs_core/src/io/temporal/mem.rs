@@ -177,11 +177,11 @@ pub fn row_contiguous<'a, T>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &ArrayView1<ColumnsDtype>,
+    columns: ArrayView1<ColumnsDtype>,
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<i64>,
-    time_idx_to_date_idx: &ArrayView1<i64>,
-    date_columns_offset: &ArrayView1<i64>,
+    full_index: ArrayView1<i64>,
+    time_idx_to_date_idx: ArrayView1<i64>,
+    date_columns_offset: ArrayView1<i64>,
     columns_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
     data_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, T>,
     flattened: &mut [T],
@@ -191,7 +191,7 @@ where
 {
     use anyhow::Ok;
 
-    let time_start_idx = searchsorted(full_index, &datetime_start);
+    let time_start_idx = searchsorted(&full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
     if full_index[time_end_idx] != datetime_end {
         MemError::datetime_index_not_continuous()
@@ -232,7 +232,7 @@ where
             let columns_len = date_columns.len();
             let cursor_end = cursor + date_count * columns_len as i64;
             let time_idx_end = time_idx + date_count;
-            let columns_idx = batch_searchsorted(&date_columns.view(), columns);
+            let columns_idx = batch_searchsorted(&date_columns, &columns);
             let mut corrected_columns_idx = columns_idx.clone();
             columns_idx.iter().enumerate().for_each(|(i, &column_idx)| {
                 if column_idx >= columns_len {
@@ -379,7 +379,7 @@ impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
         if let Some(indices) = cache.get(&i) {
             indices.clone()
         } else {
-            let indices = batch_searchsorted(&date_columns.view(), &self.1);
+            let indices = batch_searchsorted(date_columns, &self.1);
             cache.insert(i, indices.clone());
             indices
         }
@@ -423,11 +423,11 @@ pub fn column_contiguous<'a, T>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &ArrayView1<ColumnsDtype>,
+    columns: ArrayView1<ColumnsDtype>,
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<i64>,
-    time_idx_to_date_idx: &ArrayView1<i64>,
-    date_columns_offset: &ArrayView1<i64>,
+    full_index: ArrayView1<i64>,
+    time_idx_to_date_idx: ArrayView1<i64>,
+    date_columns_offset: ArrayView1<i64>,
     columns_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
     columns_indices_getter: &dyn ColumnIndicesGetter,
     data_getter: &dyn Fetcher<T>,
@@ -438,7 +438,7 @@ pub fn column_contiguous<'a, T>(
 where
     T: AFloat,
 {
-    let time_start_idx = searchsorted(full_index, &datetime_start);
+    let time_start_idx = searchsorted(&full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
     if full_index[time_end_idx] != datetime_end {
         MemError::datetime_index_not_continuous()
@@ -584,11 +584,11 @@ pub async fn async_column_contiguous<'a, T, F>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &ArrayView1<'_, ColumnsDtype>,
+    columns: ArrayView1<'_, ColumnsDtype>,
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<'_, i64>,
-    time_idx_to_date_idx: &ArrayView1<'_, i64>,
-    date_columns_offset: &ArrayView1<'_, i64>,
+    full_index: ArrayView1<'_, i64>,
+    time_idx_to_date_idx: ArrayView1<'_, i64>,
+    date_columns_offset: ArrayView1<'_, i64>,
     columns_getter: &dyn Fn(i64, i64) -> ArrayView1<'a, ColumnsDtype>,
     columns_indices_getter: &dyn ColumnIndicesGetter,
     data_getter: F,
@@ -600,7 +600,7 @@ where
     T: AFloat,
     F: AsyncFetcher<T>,
 {
-    let time_start_idx = searchsorted(full_index, &datetime_start);
+    let time_start_idx = searchsorted(&full_index, &datetime_start);
     let time_end_idx = time_start_idx + datetime_len as usize - 1;
     if full_index[time_end_idx] != datetime_end {
         MemError::datetime_index_not_continuous()
@@ -757,13 +757,13 @@ pub fn shm_row_contiguous<T: AFloat>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &ArrayView1<ColumnsDtype>,
+    columns: ArrayView1<ColumnsDtype>,
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<i64>,
-    time_idx_to_date_idx: &ArrayView1<i64>,
-    date_columns_offset: &ArrayView1<i64>,
-    compact_columns: &ArrayView1<ColumnsDtype>,
-    compact_data: &ArrayView1<T>,
+    full_index: ArrayView1<i64>,
+    time_idx_to_date_idx: ArrayView1<i64>,
+    date_columns_offset: ArrayView1<i64>,
+    compact_columns: ArrayView1<ColumnsDtype>,
+    compact_data: ArrayView1<T>,
 ) -> Result<Vec<T>> {
     let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
     let flattened_slice = flattened.as_mut_slice();
@@ -804,20 +804,21 @@ pub fn shm_row_contiguous<T: AFloat>(
 /// - `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
 /// - `compact_columns` (`S`) - the full, compact columns.
 /// - `compact_data` (`T * S`) - the full, compact data.
-pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
+pub fn shm_column_contiguous<T: AFloat>(
     datetime_start: i64,
     datetime_end: i64,
     datetime_len: i64,
-    columns: &'b ArrayView1<'b, ColumnsDtype>,
+    columns: ArrayView1<ColumnsDtype>,
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<i64>,
-    time_idx_to_date_idx: &ArrayView1<i64>,
-    date_columns_offset: &ArrayView1<i64>,
-    compact_columns: &ArrayView1<ColumnsDtype>,
-    compact_data: &'a ArrayView1<'a, T>,
+    full_index: ArrayView1<i64>,
+    time_idx_to_date_idx: ArrayView1<i64>,
+    date_columns_offset: ArrayView1<i64>,
+    compact_columns: ArrayView1<ColumnsDtype>,
+    compact_data: ArrayView1<T>,
 ) -> Result<Vec<T>> {
     let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
     let flattened_slice = flattened.as_mut_slice();
+    let compact_data = compact_data.view();
     column_contiguous(
         None,
         datetime_start,
@@ -830,7 +831,7 @@ pub fn shm_column_contiguous<'a, 'b, T: AFloat>(
         date_columns_offset,
         &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
         &CachedGetter::new(columns.view()),
-        &SHMFetcher::new(compact_data),
+        &SHMFetcher::new(&compact_data),
         &mut UnsafeSlice::new(flattened_slice),
         None,
         None,
@@ -843,13 +844,13 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &'b [ArrayView1<'b, ColumnsDtype>],
+    columns: &'a [ArrayView1<'a, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &[&ArrayView1<i64>],
-    time_idx_to_date_idx: &[&ArrayView1<i64>],
-    date_columns_offset: &[&ArrayView1<i64>],
-    compact_columns: &[&ArrayView1<ColumnsDtype>],
-    compact_data: &[&'a ArrayView1<'a, T>],
+    full_index: &[ArrayView1<i64>],
+    time_idx_to_date_idx: &[ArrayView1<i64>],
+    date_columns_offset: &[ArrayView1<i64>],
+    compact_columns: &[ArrayView1<ColumnsDtype>],
+    compact_data: &'b [ArrayView1<'b, T>],
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let nc = compact_data.len();
@@ -872,7 +873,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                 let full_index = full_index[c];
                 let time_idx_to_date_idx = time_idx_to_date_idx[c];
                 let date_columns_offset = date_columns_offset[c];
-                let compact_columns = compact_columns[c];
+                let compact_columns = &compact_columns[c];
                 let columns_getter = |start_idx: i64, end_idx: i64| {
                     compact_columns.slice(s![start_idx as isize..end_idx as isize])
                 };
@@ -892,7 +893,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
                                 datetime_start,
                                 datetime_end,
                                 datetime_len,
-                                &columns,
+                                columns,
                                 num_ticks_per_day,
                                 full_index,
                                 time_idx_to_date_idx,
@@ -940,11 +941,11 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
     datetime_len: i64,
     columns: ArrayView1<ColumnsDtype>,
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<i64>,
-    time_idx_to_date_idx: &ArrayView1<i64>,
-    date_columns_offset: &ArrayView1<i64>,
-    compact_columns: &ArrayView1<ColumnsDtype>,
-    sliced_data: &'a [&'a ArrayView1<'a, T>],
+    full_index: ArrayView1<i64>,
+    time_idx_to_date_idx: ArrayView1<i64>,
+    date_columns_offset: ArrayView1<i64>,
+    compact_columns: ArrayView1<ColumnsDtype>,
+    sliced_data: &'a [ArrayView1<'a, T>],
     multiplier: Option<i64>,
 ) -> Result<Vec<T>> {
     let mut flattened =
@@ -955,7 +956,7 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
         datetime_start,
         datetime_end,
         datetime_len,
-        &columns,
+        columns,
         num_ticks_per_day,
         full_index,
         time_idx_to_date_idx,
@@ -975,13 +976,13 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &'b [ArrayView1<'b, ColumnsDtype>],
+    columns: &'a [ArrayView1<'a, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &[&ArrayView1<i64>],
-    time_idx_to_date_idx: &[&ArrayView1<i64>],
-    date_columns_offset: &[&ArrayView1<i64>],
-    compact_columns: &[&ArrayView1<ColumnsDtype>],
-    sliced_data: &'a [&[&'a ArrayView1<'a, T>]],
+    full_index: &[ArrayView1<i64>],
+    time_idx_to_date_idx: &[ArrayView1<i64>],
+    date_columns_offset: &[ArrayView1<i64>],
+    compact_columns: &[ArrayView1<ColumnsDtype>],
+    sliced_data: &'b [&[ArrayView1<'b, T>]],
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let nc = sliced_data.len();
@@ -1001,7 +1002,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
             let full_index = full_index[c];
             let time_idx_to_date_idx = time_idx_to_date_idx[c];
             let date_columns_offset = date_columns_offset[c];
-            let compact_columns = compact_columns[c];
+            let compact_columns = &compact_columns[c];
             let columns_getter = |start_idx: i64, end_idx: i64| {
                 compact_columns.slice(s![start_idx as isize..end_idx as isize])
             };
@@ -1021,7 +1022,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
                             datetime_start,
                             datetime_end,
                             datetime_len,
-                            &columns,
+                            columns,
                             num_ticks_per_day,
                             full_index,
                             time_idx_to_date_idx,
@@ -1047,13 +1048,13 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &'b [ArrayView1<'b, ColumnsDtype>],
+    columns: &'a [ArrayView1<'a, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &ArrayView1<i64>,
-    time_idx_to_date_idx: &ArrayView1<i64>,
-    date_columns_offset: &ArrayView1<i64>,
-    compact_columns: &ArrayView1<ColumnsDtype>,
-    sliced_data: &'a [&'a ArrayView1<'a, T>],
+    full_index: ArrayView1<i64>,
+    time_idx_to_date_idx: ArrayView1<i64>,
+    date_columns_offset: ArrayView1<i64>,
+    compact_columns: ArrayView1<ColumnsDtype>,
+    sliced_data: &'b [ArrayView1<'b, T>],
     num_threads: usize,
     num_groups: i64,
 ) -> Result<Vec<T>> {
@@ -1068,11 +1069,11 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
         .num_threads(num_threads)
         .build()?;
     let (sender, receiver) = channel();
+    let columns_getter = |start_idx: i64, end_idx: i64| {
+        compact_columns.slice(s![start_idx as isize..end_idx as isize])
+    };
     pool.scope(move |s| {
         let flattened_slice = UnsafeSlice::new(flattened_slice);
-        let columns_getter = |start_idx: i64, end_idx: i64| {
-            compact_columns.slice(s![start_idx as isize..end_idx as isize])
-        };
         datetime_start
             .iter()
             .enumerate()
@@ -1089,7 +1090,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
                         datetime_start,
                         datetime_end,
                         datetime_len,
-                        &columns,
+                        columns,
                         num_ticks_per_day,
                         full_index,
                         time_idx_to_date_idx,
@@ -1115,14 +1116,14 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &'b [ArrayView1<'b, ColumnsDtype>],
+    columns: &'a [ArrayView1<'a, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &[&ArrayView1<i64>],
-    time_idx_to_date_idx: &[&ArrayView1<i64>],
-    date_columns_offset: &[&ArrayView1<i64>],
-    compact_columns: &[&ArrayView1<ColumnsDtype>],
-    redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
-    redis_client: &'a RedisClient<T>,
+    full_index: &[ArrayView1<i64>],
+    time_idx_to_date_idx: &[ArrayView1<i64>],
+    date_columns_offset: &[ArrayView1<i64>],
+    compact_columns: &[ArrayView1<ColumnsDtype>],
+    redis_keys: &'b [ArrayView1<'b, RedisKey>],
+    redis_client: &'b RedisClient<T>,
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let nc = redis_keys.len();
@@ -1142,7 +1143,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
             let full_index = full_index[c];
             let time_idx_to_date_idx = time_idx_to_date_idx[c];
             let date_columns_offset = date_columns_offset[c];
-            let compact_columns = compact_columns[c];
+            let compact_columns = &compact_columns[c];
             let columns_getter = |start_idx: i64, end_idx: i64| {
                 compact_columns.slice(s![start_idx as isize..end_idx as isize])
             };
@@ -1161,7 +1162,7 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
                             datetime_start,
                             datetime_end,
                             datetime_len,
-                            &columns,
+                            columns,
                             num_ticks_per_day,
                             full_index,
                             time_idx_to_date_idx,
@@ -1188,14 +1189,14 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &'b [ArrayView1<'b, ColumnsDtype>],
+    columns: &'a [ArrayView1<'a, ColumnsDtype>],
     num_ticks_per_day: i64,
-    full_index: &[&ArrayView1<i64>],
-    time_idx_to_date_idx: &[&ArrayView1<i64>],
-    date_columns_offset: &[&ArrayView1<i64>],
-    compact_columns: &[&ArrayView1<ColumnsDtype>],
-    redis_keys: &'a [&'a ArrayView1<'a, RedisKey>],
-    redis_client: &'a RedisClient<T>,
+    full_index: &[ArrayView1<i64>],
+    time_idx_to_date_idx: &[ArrayView1<i64>],
+    date_columns_offset: &[ArrayView1<i64>],
+    compact_columns: &[ArrayView1<ColumnsDtype>],
+    redis_keys: &'b [ArrayView1<'b, RedisKey>],
+    redis_client: &'b RedisClient<T>,
     multipliers: &[i64],
     num_threads: usize,
 ) -> Result<Vec<T>> {
@@ -1238,7 +1239,7 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
             let full_index = full_index[g];
             let time_idx_to_date_idx = time_idx_to_date_idx[g];
             let date_columns_offset = date_columns_offset[g];
-            let compact_columns = compact_columns[g];
+            let compact_columns = &compact_columns[g];
             let columns_getter = |start_idx: i64, end_idx: i64| {
                 compact_columns.slice(s![start_idx as isize..end_idx as isize])
             };
@@ -1265,7 +1266,7 @@ pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
                             datetime_start,
                             datetime_end,
                             datetime_len,
-                            &columns[b].slice(s![column_start..column_end]),
+                            columns[b].slice(s![column_start..column_end]),
                             num_ticks_per_day,
                             full_index,
                             time_idx_to_date_idx,
@@ -1349,13 +1350,13 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
-            &full_index.view(),
-            &time_idx_to_date_idx.view(),
-            &date_columns_offset.view(),
-            &compact_columns.view(),
-            &compact_data.view(),
+            full_index.view(),
+            time_idx_to_date_idx.view(),
+            date_columns_offset.view(),
+            compact_columns.view(),
+            compact_data.view(),
         )
         .unwrap();
         let result = Array::from_shape_vec((6, 4), flattened).unwrap();
@@ -1376,13 +1377,13 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
-            &full_index.view(),
-            &time_idx_to_date_idx.view(),
-            &date_columns_offset.view(),
-            &compact_columns.view(),
-            &compact_data.view(),
+            full_index.view(),
+            time_idx_to_date_idx.view(),
+            date_columns_offset.view(),
+            compact_columns.view(),
+            compact_data.view(),
         )
         .unwrap();
         let result = Array::from_shape_vec((6, 4), flattened).unwrap();
@@ -1403,13 +1404,13 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
-            &full_index.view(),
-            &time_idx_to_date_idx.view(),
-            &date_columns_offset.view(),
-            &compact_columns.view(),
-            &compact_data.view(),
+            full_index.view(),
+            time_idx_to_date_idx.view(),
+            date_columns_offset.view(),
+            compact_columns.view(),
+            compact_data.view(),
         )
         .unwrap();
         let result = Array::from_shape_vec((6, 4), flattened).unwrap();
@@ -1445,13 +1446,13 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
-            &full_index.view(),
-            &time_idx_to_date_idx.view(),
-            &date_columns_offset.view(),
-            &compact_symbols.view(),
-            &compact_data.view(),
+            full_index.view(),
+            time_idx_to_date_idx.view(),
+            date_columns_offset.view(),
+            compact_symbols.view(),
+            compact_data.view(),
         )
         .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
@@ -1475,13 +1476,13 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
-            &full_index.view(),
-            &time_idx_to_date_idx.view(),
-            &date_columns_offset.view(),
-            &compact_symbols.view(),
-            &compact_data.view(),
+            full_index.view(),
+            time_idx_to_date_idx.view(),
+            date_columns_offset.view(),
+            compact_symbols.view(),
+            compact_data.view(),
         )
         .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
@@ -1505,13 +1506,13 @@ mod tests {
             datetime_start,
             datetime_end,
             datetime_len,
-            &columns.view(),
+            columns.view(),
             num_ticks_per_day,
-            &full_index.view(),
-            &time_idx_to_date_idx.view(),
-            &date_columns_offset.view(),
-            &compact_symbols.view(),
-            &compact_data.view(),
+            full_index.view(),
+            time_idx_to_date_idx.view(),
+            date_columns_offset.view(),
+            compact_symbols.view(),
+            compact_data.view(),
         )
         .unwrap();
         let result = Array::from_shape_vec((4, 6), flattened)
@@ -1555,7 +1556,6 @@ mod tests {
             Array::from_iter((30..44).map(|x| x as f32)),
         ];
         let sliced_data = sliced_data.iter().map(|x| x.view()).collect_vec();
-        let sliced_data = sliced_data.iter().collect_vec();
 
         let flattened = shm_sliced_column_contiguous(
             datetime_start,
@@ -1563,11 +1563,11 @@ mod tests {
             datetime_len,
             columns.view(),
             num_ticks_per_day,
-            &full_index,
-            &time_idx_to_date_idx,
-            &date_symbols_offset,
-            &compact_symbols,
-            &sliced_data,
+            full_index,
+            time_idx_to_date_idx,
+            date_symbols_offset,
+            compact_symbols,
+            sliced_data.as_slice(),
             None,
         )
         .unwrap();
@@ -1594,11 +1594,11 @@ mod tests {
             datetime_len,
             columns.view(),
             num_ticks_per_day,
-            &full_index,
-            &time_idx_to_date_idx,
-            &date_symbols_offset,
-            &compact_symbols,
-            &sliced_data,
+            full_index,
+            time_idx_to_date_idx,
+            date_symbols_offset,
+            compact_symbols,
+            sliced_data.as_slice(),
             None,
         )
         .unwrap();
@@ -1625,11 +1625,11 @@ mod tests {
             datetime_len,
             columns.view(),
             num_ticks_per_day,
-            &full_index,
-            &time_idx_to_date_idx,
-            &date_symbols_offset,
-            &compact_symbols,
-            &sliced_data,
+            full_index,
+            time_idx_to_date_idx,
+            date_symbols_offset,
+            compact_symbols,
+            sliced_data.as_slice(),
             None,
         )
         .unwrap();
