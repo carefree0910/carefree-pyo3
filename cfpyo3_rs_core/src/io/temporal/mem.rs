@@ -840,7 +840,7 @@ pub fn shm_column_contiguous<T: AFloat>(
 }
 
 /// a batched version of `shm_column_contiguous`.
-pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
+pub fn shm_batch_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
@@ -850,7 +850,7 @@ pub fn shm_batch_column_contiguous<'a, 'b, T: AFloat>(
     time_idx_to_date_idx: &[ArrayView1<i64>],
     date_columns_offset: &[ArrayView1<i64>],
     compact_columns: &[ArrayView1<ColumnsDtype>],
-    compact_data: &'b [ArrayView1<'b, T>],
+    compact_data: &'a [ArrayView1<'a, T>],
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let nc = compact_data.len();
@@ -972,7 +972,7 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
 }
 
 /// a batched version of `shm_sliced_column_contiguous`.
-pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
+pub fn shm_batch_sliced_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
@@ -982,7 +982,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
     time_idx_to_date_idx: &[ArrayView1<i64>],
     date_columns_offset: &[ArrayView1<i64>],
     compact_columns: &[ArrayView1<ColumnsDtype>],
-    sliced_data: &'b [&[ArrayView1<'b, T>]],
+    sliced_data: &'a [&[ArrayView1<'a, T>]],
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let nc = sliced_data.len();
@@ -1044,7 +1044,7 @@ pub fn shm_batch_sliced_column_contiguous<'a, 'b, T: AFloat>(
 }
 
 /// a batched & grouped version of `shm_sliced_column_contiguous`.
-pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
+pub fn shm_batch_grouped_sliced_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
@@ -1054,7 +1054,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
     time_idx_to_date_idx: ArrayView1<i64>,
     date_columns_offset: ArrayView1<i64>,
     compact_columns: ArrayView1<ColumnsDtype>,
-    sliced_data: &'b [ArrayView1<'b, T>],
+    sliced_data: &'a [ArrayView1<'a, T>],
     num_threads: usize,
     num_groups: i64,
 ) -> Result<Vec<T>> {
@@ -1112,7 +1112,7 @@ pub fn shm_batch_grouped_sliced_column_contiguous<'a, 'b, T: AFloat>(
 
 /// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
 #[cfg(feature = "io-mem-redis")]
-pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
+pub fn redis_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
@@ -1122,8 +1122,8 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
     time_idx_to_date_idx: &[ArrayView1<i64>],
     date_columns_offset: &[ArrayView1<i64>],
     compact_columns: &[ArrayView1<ColumnsDtype>],
-    redis_keys: &'b [ArrayView1<'b, RedisKey>],
-    redis_client: &'b RedisClient<T>,
+    redis_keys: &'a [ArrayView1<'a, RedisKey>],
+    redis_client: &'a RedisClient<T>,
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let nc = redis_keys.len();
@@ -1185,18 +1185,18 @@ pub fn redis_column_contiguous<'a, 'b, T: AFloat>(
 
 /// a grouped version of `redis_column_contiguous`.
 #[cfg(feature = "io-mem-redis")]
-pub fn redis_grouped_column_contiguous<'a, 'b, T: AFloat>(
+pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
     datetime_len: i64,
-    columns: &'a [ArrayView1<'a, ColumnsDtype>],
+    columns: &[ArrayView1<ColumnsDtype>],
     num_ticks_per_day: i64,
     full_index: &[ArrayView1<i64>],
     time_idx_to_date_idx: &[ArrayView1<i64>],
     date_columns_offset: &[ArrayView1<i64>],
     compact_columns: &[ArrayView1<ColumnsDtype>],
-    redis_keys: &'b [ArrayView1<'b, RedisKey>],
-    redis_client: &'b RedisClient<T>,
+    redis_keys: &[ArrayView1<'a, RedisKey>],
+    redis_client: &'a RedisClient<T>,
     multipliers: &[i64],
     num_threads: usize,
 ) -> Result<Vec<T>> {
