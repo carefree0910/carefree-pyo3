@@ -9,9 +9,12 @@ use tokio::{
     task::JoinHandle,
 };
 
+pub trait WithQueueThreads {
+    fn get_queue_threads(&self) -> usize;
+}
 pub trait Worker<T, R>: Send + Sync
 where
-    T: Send + Sync,
+    T: Send + Sync + WithQueueThreads,
     R: Send + Sync,
 {
     fn process(&self, cursor: usize, data: T) -> Result<R>;
@@ -19,7 +22,7 @@ where
 
 pub struct AsyncQueue<T, R>
 where
-    T: Send + Sync,
+    T: Send + Sync + WithQueueThreads,
     R: Send + Sync,
 {
     worker: Arc<RwLock<Box<dyn Worker<T, R>>>>,
@@ -29,7 +32,7 @@ where
 }
 impl<T, R> AsyncQueue<T, R>
 where
-    T: Send + Sync + 'static,
+    T: Send + Sync + WithQueueThreads + 'static,
     R: Send + Sync + 'static,
 {
     pub fn new(worker: Box<dyn Worker<T, R>>) -> Self {
@@ -44,7 +47,10 @@ where
     pub fn submit(&mut self, cursor: usize, data: T) {
         let worker = Arc::clone(&self.worker);
         let results = Arc::clone(&self.results);
-        let handle = TWO_THREAD_RT.spawn(async move {
+        let rt = RT_POOL
+            .get(&data.get_queue_threads())
+            .unwrap_or_else(|| panic!("No runtime for {} threads", data.get_queue_threads()));
+        let handle = rt.spawn(async move {
             let result = worker.read().unwrap().process(cursor, data);
             results.lock().unwrap().insert(cursor, result);
         });
@@ -64,10 +70,16 @@ where
     }
 }
 
-static TWO_THREAD_RT: LazyLock<Runtime> = LazyLock::new(|| {
+fn get_rt(num_threads: usize) -> Runtime {
     Builder::new_multi_thread()
-        .worker_threads(2)
+        .worker_threads(num_threads)
         .enable_all()
         .build()
         .unwrap()
+}
+static RT_POOL: LazyLock<HashMap<usize, Runtime>> = LazyLock::new(|| {
+    let mut pool = HashMap::new();
+    pool.insert(2, get_rt(2));
+    pool.insert(4, get_rt(4));
+    pool
 });
