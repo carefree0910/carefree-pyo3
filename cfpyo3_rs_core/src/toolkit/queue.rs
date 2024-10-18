@@ -2,9 +2,12 @@ use anyhow::Result;
 use std::{
     collections::HashMap,
     marker::PhantomData,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
 };
-use tokio::task::JoinHandle;
+use tokio::{
+    runtime::{Builder, Runtime},
+    task::JoinHandle,
+};
 
 pub trait Worker<T, R>: Send + Sync
 where
@@ -41,7 +44,7 @@ where
     pub fn submit(&mut self, cursor: usize, data: T) {
         let worker = Arc::clone(&self.worker);
         let results = Arc::clone(&self.results);
-        let handle = tokio::spawn(async move {
+        let handle = TWO_THREAD_RT.spawn(async move {
             let result = worker.read().unwrap().process(cursor, data);
             results.lock().unwrap().insert(cursor, result);
         });
@@ -60,3 +63,11 @@ where
         self.results.lock().unwrap().clear();
     }
 }
+
+static TWO_THREAD_RT: LazyLock<Runtime> = LazyLock::new(|| {
+    Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+});
