@@ -194,6 +194,9 @@ impl NamedTrackers {
 
 #[cfg(feature = "tokio")]
 pub fn init_rt(num_threads: usize) -> Runtime {
+    if num_threads <= 1 {
+        return Builder::new_current_thread().enable_all().build().unwrap();
+    }
     Builder::new_multi_thread()
         .worker_threads(num_threads)
         .enable_all()
@@ -211,6 +214,7 @@ pub fn get_rt<'a>(num_threads: usize) -> &'a Runtime {
 #[cfg(feature = "tokio")]
 static RT_POOL: LazyLock<HashMap<usize, Runtime>> = LazyLock::new(|| {
     let mut pool = HashMap::new();
+    pool.insert(1, init_rt(1));
     pool.insert(2, init_rt(2));
     pool.insert(4, init_rt(4));
     pool
