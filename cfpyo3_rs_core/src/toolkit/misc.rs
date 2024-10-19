@@ -1,5 +1,12 @@
 use md5::{Digest, Md5};
-use std::{collections::HashMap, fmt, sync::RwLock, time::Instant};
+use std::{
+    collections::HashMap,
+    fmt,
+    sync::{LazyLock, RwLock},
+    time::Instant,
+};
+#[cfg(feature = "tokio")]
+use tokio::runtime::{Builder, Runtime};
 
 pub fn hash_code(code: &str) -> String {
     let mut hasher = Md5::new();
@@ -182,3 +189,29 @@ impl NamedTrackers {
             .collect()
     }
 }
+
+// tokio utils
+
+#[cfg(feature = "tokio")]
+pub fn init_rt(num_threads: usize) -> Runtime {
+    Builder::new_multi_thread()
+        .worker_threads(num_threads)
+        .enable_all()
+        .build()
+        .unwrap()
+}
+
+#[cfg(feature = "tokio")]
+pub fn get_rt<'a>(num_threads: usize) -> &'a Runtime {
+    RT_POOL
+        .get(&num_threads)
+        .unwrap_or_else(|| panic!("No runtime for {} threads", num_threads))
+}
+
+#[cfg(feature = "tokio")]
+static RT_POOL: LazyLock<HashMap<usize, Runtime>> = LazyLock::new(|| {
+    let mut pool = HashMap::new();
+    pool.insert(2, init_rt(2));
+    pool.insert(4, init_rt(4));
+    pool
+});

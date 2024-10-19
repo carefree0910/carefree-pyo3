@@ -1,13 +1,11 @@
+use super::misc::get_rt;
 use anyhow::Result;
 use std::{
     collections::HashMap,
     marker::PhantomData,
-    sync::{Arc, LazyLock, Mutex, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
-use tokio::{
-    runtime::{Builder, Runtime},
-    task::JoinHandle,
-};
+use tokio::task::JoinHandle;
 
 pub trait WithQueueThreads {
     fn get_queue_threads(&self) -> usize;
@@ -47,9 +45,7 @@ where
     pub fn submit(&mut self, cursor: usize, data: T) {
         let worker = Arc::clone(&self.worker);
         let results = Arc::clone(&self.results);
-        let rt = RT_POOL
-            .get(&data.get_queue_threads())
-            .unwrap_or_else(|| panic!("No runtime for {} threads", data.get_queue_threads()));
+        let rt = get_rt(data.get_queue_threads());
         let handle = rt.spawn(async move {
             let result = worker.read().unwrap().process(cursor, data);
             results.lock().unwrap().insert(cursor, result);
@@ -69,17 +65,3 @@ where
         self.results.lock().unwrap().clear();
     }
 }
-
-fn get_rt(num_threads: usize) -> Runtime {
-    Builder::new_multi_thread()
-        .worker_threads(num_threads)
-        .enable_all()
-        .build()
-        .unwrap()
-}
-static RT_POOL: LazyLock<HashMap<usize, Runtime>> = LazyLock::new(|| {
-    let mut pool = HashMap::new();
-    pool.insert(2, get_rt(2));
-    pool.insert(4, get_rt(4));
-    pool
-});

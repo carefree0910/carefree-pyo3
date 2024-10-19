@@ -38,9 +38,12 @@ tempfile = "3.13.0"
 
 [features]
 default = []
-io-source-opendal = [
-    "dep:opendal",
+tokio = [
     "dep:tokio",
+]
+io-source-opendal = [
+    "tokio",
+    "dep:opendal",
 ]
 io-mem-redis = [
     "dep:redis",
@@ -49,7 +52,7 @@ bench-io-mem-redis = [
     "io-mem-redis",
 ]
 async-queue = [
-    "dep:tokio",
+    "tokio",
 ]
 
 full = [
