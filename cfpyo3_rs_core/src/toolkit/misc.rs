@@ -193,7 +193,7 @@ impl NamedTrackers {
 // tokio utils
 
 #[cfg(feature = "tokio")]
-pub fn init_rt(num_threads: usize) -> Runtime {
+fn init_rt(num_threads: usize) -> Runtime {
     if num_threads <= 1 {
         return Builder::new_current_thread().enable_all().build().unwrap();
     }
@@ -205,13 +205,6 @@ pub fn init_rt(num_threads: usize) -> Runtime {
 }
 
 #[cfg(feature = "tokio")]
-pub fn get_rt<'a>(num_threads: usize) -> &'a Runtime {
-    RT_POOL
-        .get(&num_threads)
-        .unwrap_or_else(|| panic!("No runtime for {} threads", num_threads))
-}
-
-#[cfg(feature = "tokio")]
 static RT_POOL: LazyLock<HashMap<usize, Runtime>> = LazyLock::new(|| {
     let mut pool = HashMap::new();
     pool.insert(1, init_rt(1));
@@ -219,3 +212,15 @@ static RT_POOL: LazyLock<HashMap<usize, Runtime>> = LazyLock::new(|| {
     pool.insert(4, init_rt(4));
     pool
 });
+
+/// Get a tokio runtime with specific number of threads.
+///
+/// # Panics
+///
+/// Currently, only 1, 2, and 4 threads are supported, other numbers will cause panic.
+#[cfg(feature = "tokio")]
+pub fn get_rt<'a>(num_threads: usize) -> &'a Runtime {
+    RT_POOL
+        .get(&num_threads)
+        .unwrap_or_else(|| panic!("No runtime for {} threads", num_threads))
+}
