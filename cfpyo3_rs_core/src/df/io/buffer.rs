@@ -47,7 +47,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
             "internal error: buffer not fully consumed"
         );
 
-        DataFrame::from_owned(index_vec, columns_vec, values_vec)
+        DataFrame::from_vec(index_vec, columns_vec, values_vec)
     }
 }
 
@@ -61,8 +61,8 @@ mod tests {
         let df = get_test_df();
         let bytes = df.to_bytes().unwrap();
         let loaded = DataFrame::<f32>::from_buffer(bytes.as_slice()).unwrap();
-        assert_eq!(df.index, loaded.index);
-        assert_eq!(df.columns, loaded.columns);
-        assert_eq!(df.values, loaded.values);
+        assert_eq!(df.index(), loaded.index());
+        assert_eq!(df.columns(), loaded.columns());
+        assert_eq!(df.values(), loaded.values());
     }
 }

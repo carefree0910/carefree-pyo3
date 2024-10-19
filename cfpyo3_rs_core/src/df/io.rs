@@ -37,12 +37,12 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
                 from_bytes(values_buffer),
             )
         };
-        DataFrame::from_owned(index, columns, values)
+        DataFrame::from_vec(index, columns, values)
     }
 
     pub fn write(&self, writer: &mut impl Write) -> Result<()> {
-        let index = &self.index;
-        let columns = &self.columns;
+        let index = self.index();
+        let columns = self.columns();
         let index_nbytes = to_nbytes::<IndexDtype>(index.len()) as i64;
         let columns_nbytes = to_nbytes::<ColumnsDtype>(columns.len()) as i64;
         writer.write_all(&index_nbytes.to_le_bytes())?;
@@ -50,7 +50,7 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         unsafe {
             writer.write_all(to_bytes(as_data_slice_or_err!(index)))?;
             writer.write_all(to_bytes(as_data_slice_or_err!(columns)))?;
-            writer.write_all(to_bytes(as_data_slice_or_err!(self.values)))?;
+            writer.write_all(to_bytes(as_data_slice_or_err!(self.values())))?;
         }
         Ok(())
     }
@@ -72,9 +72,9 @@ pub(super) mod tests {
         df.write(&mut file).unwrap();
         let mut file = File::open(&file_path).unwrap();
         let loaded = DataFrame::<f32>::read(&mut file).unwrap();
-        assert_eq!(df.index, loaded.index);
-        assert_eq!(df.columns, loaded.columns);
-        assert_eq!(df.values, loaded.values);
+        assert_eq!(df.index(), loaded.index());
+        assert_eq!(df.columns(), loaded.columns());
+        assert_eq!(df.values(), loaded.values());
         drop(file);
         dir.close().unwrap();
     }

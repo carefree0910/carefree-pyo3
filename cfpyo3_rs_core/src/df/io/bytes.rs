@@ -34,9 +34,9 @@ fn put_aligned_slice(bytes: &mut Vec<u8>, slice: &[u8]) {
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let index = &self.index;
-        let columns = &self.columns;
-        let values = &self.values;
+        let index = self.index();
+        let columns = self.columns();
+        let values = self.values();
         let index_nbytes = to_nbytes::<IndexDtype>(index.len());
         let columns_nbytes = to_nbytes::<ColumnsDtype>(columns.len());
         let values_nbytes = to_nbytes::<T>(values.len());
@@ -111,7 +111,7 @@ pub(super) mod tests {
         let values_vec = unsafe { from_vec(values_vec) };
         let values_vec = values_vec[..1].to_vec();
 
-        DataFrame::<f32>::from_owned(index_vec, columns_vec, values_vec).unwrap()
+        DataFrame::<f32>::from_vec(index_vec, columns_vec, values_vec).unwrap()
     }
 
     #[test]
@@ -132,8 +132,8 @@ pub(super) mod tests {
             );
         };
         let loaded = unsafe { DataFrame::<f32>::from_bytes(&bytes).unwrap() };
-        assert_eq!(df.index, loaded.index);
-        assert_eq!(df.columns, loaded.columns);
-        assert_eq!(df.values, loaded.values);
+        assert_eq!(df.index(), loaded.index());
+        assert_eq!(df.columns(), loaded.columns());
+        assert_eq!(df.values(), loaded.values());
     }
 }

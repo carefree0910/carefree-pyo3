@@ -33,39 +33,29 @@ impl WithCore for DataFrameF64 {
         let index = self.get_index_array(py);
         let columns = self.get_columns_array(py);
         let values = self.get_values_array(py);
-        DataFrame::new(index.into(), columns.into(), values.into())
+        DataFrame::new_view(index, columns, values)
     }
     fn from_core(py: Python, df: DataFrame<f64>) -> Self {
         DataFrameF64 {
-            index: df.index.to_pyarray_bound(py).unbind(),
-            columns: df.columns.to_pyarray_bound(py).unbind(),
-            values: df.values.to_pyarray_bound(py).unbind(),
+            index: df.index().to_pyarray_bound(py).unbind(),
+            columns: df.columns().to_pyarray_bound(py).unbind(),
+            values: df.values().to_pyarray_bound(py).unbind(),
         }
     }
 }
 
 impl WithCore for OwnedDataFrameF64 {
     fn to_core(&self, _: Python) -> DataFrame<f64> {
-        DataFrame::new(
-            self.index.view().into(),
-            self.columns.view().into(),
-            self.values.view().into(),
-        )
+        DataFrame::new_view(self.index.view(), self.columns.view(), self.values.view())
     }
     fn from_core(_: Python, df: DataFrame<f64>) -> Self {
-        OwnedDataFrameF64 {
-            index: df
-                .index
-                .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("index is not owned")),
-            columns: df
-                .columns
-                .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("columns is not owned")),
-            values: df
-                .values
-                .try_into_owned_nocopy()
-                .unwrap_or_else(|_| panic!("values is not owned")),
+        match df {
+            DataFrame::View(_) => panic!("cannot convert a `DataFrameView` to `OwnedDataFrameF64`"),
+            DataFrame::Owned(df) => OwnedDataFrameF64 {
+                index: df.index,
+                columns: df.columns,
+                values: df.values,
+            },
         }
     }
 }

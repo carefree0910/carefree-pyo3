@@ -1,25 +1,35 @@
-use super::DataFrame;
+use super::{DataFrame, DataFrameView, OwnedDataFrame};
 use crate::{
     df::{ColumnsDtype, IndexDtype},
     toolkit::array::AFloat,
 };
 use anyhow::Result;
-use numpy::{
-    ndarray::{Array1, Array2, ArrayView1, ArrayView2, CowArray},
-    Ix1, Ix2,
-};
+use numpy::ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
-    pub fn new(
-        index: CowArray<'a, IndexDtype, Ix1>,
-        columns: CowArray<'a, ColumnsDtype, Ix1>,
-        values: CowArray<'a, T, Ix2>,
+    // constructors
+
+    pub fn new_view(
+        index: ArrayView1<'a, IndexDtype>,
+        columns: ArrayView1<'a, ColumnsDtype>,
+        values: ArrayView2<'a, T>,
     ) -> Self {
-        Self {
+        Self::View(DataFrameView {
             index,
             columns,
             values,
-        }
+        })
+    }
+    pub fn new_owned(
+        index: Array1<IndexDtype>,
+        columns: Array1<ColumnsDtype>,
+        values: Array2<T>,
+    ) -> Self {
+        Self::Owned(OwnedDataFrame {
+            index,
+            columns,
+            values,
+        })
     }
 
     /// # Safety
@@ -45,28 +55,55 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         );
         let values =
             ArrayView2::<T>::from_shape_ptr((index_shape, columns_shape), values_ptr as *const T);
-        Self::new(index.into(), columns.into(), values.into())
+        Self::new_view(index, columns, values)
     }
-
-    pub fn from_owned(
+    pub fn from_vec(
         index: Vec<IndexDtype>,
         columns: Vec<ColumnsDtype>,
         values: Vec<T>,
     ) -> Result<Self> {
         let index_shape = index.len();
         let columns_shape = columns.len();
-        Ok(Self::new(
-            Array1::from_shape_vec((index_shape,), index)?.into(),
-            Array1::from_shape_vec((columns_shape,), columns)?.into(),
-            Array2::from_shape_vec((index_shape, columns_shape), values)?.into(),
+        Ok(Self::new_owned(
+            Array1::from_shape_vec((index_shape,), index)?,
+            Array1::from_shape_vec((columns_shape,), columns)?,
+            Array2::from_shape_vec((index_shape, columns_shape), values)?,
         ))
     }
 
-    pub fn to_owned(self) -> Self {
-        let index = self.index.into_owned();
-        let columns = self.columns.into_owned();
-        let values = self.values.into_owned();
-        Self::new(index.into(), columns.into(), values.into())
+    // getters
+
+    pub fn index(&self) -> ArrayView1<IndexDtype> {
+        match self {
+            Self::View(df) => df.index.view(),
+            Self::Owned(df) => df.index.view(),
+        }
+    }
+    pub fn columns(&self) -> ArrayView1<ColumnsDtype> {
+        match self {
+            Self::View(df) => df.columns.view(),
+            Self::Owned(df) => df.columns.view(),
+        }
+    }
+    pub fn values(&self) -> ArrayView2<T> {
+        match self {
+            Self::View(df) => df.values.view(),
+            Self::Owned(df) => df.values.view(),
+        }
+    }
+
+    pub fn is_owned(&self) -> bool {
+        matches!(self, Self::Owned(_))
+    }
+    pub fn into_owned(self) -> Self {
+        match self {
+            Self::Owned(df) => Self::Owned(df),
+            Self::View(df) => Self::new_owned(
+                df.index.to_owned(),
+                df.columns.to_owned(),
+                df.values.to_owned(),
+            ),
+        }
     }
 }
 

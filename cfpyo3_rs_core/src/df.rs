@@ -5,8 +5,8 @@
 use crate::toolkit::array::AFloat;
 use numpy::{
     datetime::{units::Nanoseconds, Datetime},
-    ndarray::CowArray,
-    Ix1, Ix2, PyFixedString,
+    ndarray::{Array1, Array2, ArrayView1, ArrayView2},
+    PyFixedString,
 };
 
 mod io;
@@ -19,8 +19,19 @@ pub type ColumnsDtype = PyFixedString<COLUMNS_NBYTES>;
 pub const INDEX_NBYTES: usize = core::mem::size_of::<IndexDtype>();
 
 #[derive(Debug)]
-pub struct DataFrame<'a, T: AFloat> {
-    pub index: CowArray<'a, IndexDtype, Ix1>,
-    pub columns: CowArray<'a, ColumnsDtype, Ix1>,
-    pub values: CowArray<'a, T, Ix2>,
+pub struct OwnedDataFrame<T: AFloat> {
+    pub index: Array1<IndexDtype>,
+    pub columns: Array1<ColumnsDtype>,
+    pub values: Array2<T>,
+}
+#[derive(Debug)]
+pub struct DataFrameView<'a, T: AFloat> {
+    pub index: ArrayView1<'a, IndexDtype>,
+    pub columns: ArrayView1<'a, ColumnsDtype>,
+    pub values: ArrayView2<'a, T>,
+}
+
+pub enum DataFrame<'a, T: AFloat> {
+    View(DataFrameView<'a, T>),
+    Owned(OwnedDataFrame<T>),
 }

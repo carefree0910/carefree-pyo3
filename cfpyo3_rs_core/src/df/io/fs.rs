@@ -28,9 +28,9 @@ pub(super) mod tests {
         let file_path = file_path.to_str().unwrap();
         df.save(file_path).unwrap();
         let loaded = DataFrame::<f32>::load(file_path).unwrap();
-        assert_eq!(df.index, loaded.index);
-        assert_eq!(df.columns, loaded.columns);
-        assert_eq!(df.values, loaded.values);
+        assert_eq!(df.index(), loaded.index());
+        assert_eq!(df.columns(), loaded.columns());
+        assert_eq!(df.values(), loaded.values());
         dir.close().unwrap();
     }
 }
