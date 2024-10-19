@@ -1,10 +1,7 @@
 use md5::{Digest, Md5};
-use std::{
-    collections::HashMap,
-    fmt,
-    sync::{LazyLock, RwLock},
-    time::Instant,
-};
+#[cfg(feature = "tokio")]
+use std::sync::LazyLock;
+use std::{collections::HashMap, fmt, sync::RwLock, time::Instant};
 #[cfg(feature = "tokio")]
 use tokio::runtime::{Builder, Runtime};
 
