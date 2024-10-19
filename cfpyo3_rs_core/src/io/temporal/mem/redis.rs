@@ -6,6 +6,7 @@ use crate::toolkit::{
     convert::{from_bytes, to_nbytes},
 };
 use anyhow::{anyhow, Context, Result};
+use core::marker::PhantomData;
 use itertools::Itertools;
 use numpy::{
     ndarray::{Array1, ArrayView1, CowArray},
@@ -15,7 +16,7 @@ use redis::{
     cluster::{ClusterClient, ClusterClientBuilder, ClusterConnection},
     Commands, Script,
 };
-use std::{env, iter::zip, marker::PhantomData, sync::Mutex};
+use std::{env, iter::zip, sync::Mutex};
 
 // core implementations
 

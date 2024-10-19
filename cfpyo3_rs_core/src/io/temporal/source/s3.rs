@@ -2,8 +2,8 @@ use super::Source;
 use crate::df::DataFrame;
 use crate::toolkit::array::AFloat;
 use anyhow::Result;
+use core::marker::PhantomData;
 use opendal::{services::S3, Operator};
-use std::marker::PhantomData;
 
 // core implementations
 
