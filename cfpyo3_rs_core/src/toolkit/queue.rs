@@ -57,11 +57,18 @@ where
         self.results.lock().unwrap().remove(&cursor)
     }
 
-    pub fn reset(&mut self) {
-        self.pending.iter().for_each(|handle| {
-            handle.abort();
-        });
-        self.pending.clear();
+    pub fn reset(&mut self, block_after_abort: bool) -> Result<()> {
+        use anyhow::Ok;
+
+        let rt = get_rt(1);
         self.results.lock().unwrap().clear();
+        self.pending.drain(..).try_for_each(|handle| {
+            handle.abort();
+            if block_after_abort {
+                rt.block_on(handle)?;
+            }
+            Ok(())
+        })?;
+        Ok(())
     }
 }
