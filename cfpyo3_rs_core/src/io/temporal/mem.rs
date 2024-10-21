@@ -198,19 +198,6 @@ where
             offset_before + date_offset
         };
 
-        #[inline(always)]
-        fn fill_data<T: AFloat>(
-            time_idx: i64,
-            column_idx: usize,
-            data: ArrayView1<'_, T>,
-            flattened: &mut [T],
-            num_columns: usize,
-        ) {
-            data.iter().enumerate().for_each(|(i, &x)| {
-                flattened[(time_idx as usize + i) * num_columns + column_idx] = x
-            });
-        }
-
         let mut cursor: i64 = 0;
         let mut time_idx: i64 = 0;
         zip(date_counts, columns_per_day).try_for_each(|(date_count, date_columns)| {
@@ -232,16 +219,13 @@ where
                 .try_for_each(|(i, (corrected_idx, idx))| {
                     if date_columns[corrected_idx] == columns[i] {
                         let i_selected_data = selected_data.row(idx);
-                        fill_data(time_idx, i, i_selected_data, flattened, num_columns)
+                        i_selected_data.iter().enumerate().for_each(|(j, &x)| {
+                            flattened[(time_idx as usize + j) * num_columns + i] = x
+                        });
                     } else {
-                        let nan_data = vec![T::nan(); date_count as usize];
-                        fill_data(
-                            time_idx,
-                            i,
-                            ArrayView1::from_shape(date_count as usize, &nan_data)?,
-                            flattened,
-                            num_columns,
-                        )
+                        (0..date_count as usize).for_each(|j| {
+                            flattened[(time_idx as usize + j) * num_columns + i] = T::nan();
+                        });
                     }
                     Ok(())
                 })?;
@@ -1319,7 +1303,6 @@ mod tests {
         let datetime_end = 8;
         let datetime_len = 6;
         let columns = to_columns_array(array![0, 1, 2, 3]);
-        println!("{:?}", columns);
         let num_ticks_per_day = 2;
         let full_index = array![0, 1, 2, 3, 4, 6, 8, 10];
         let time_idx_to_date_idx = array![0, 0, 1, 1, 2, 2, 3, 3];
