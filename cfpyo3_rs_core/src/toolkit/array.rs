@@ -461,7 +461,7 @@ macro_rules! parallel_apply {
 
 pub fn sum_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |row: ArrayView1<T>| simd_sum(row.as_slice().unwrap()),
         a.rows().into_iter(),
@@ -472,7 +472,7 @@ pub fn sum_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
 }
 pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |row: ArrayView1<T>| simd_mean(row.as_slice().unwrap()),
         a.rows().into_iter(),
@@ -483,7 +483,7 @@ pub fn mean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
 }
 pub fn nanmean_axis1<T: AFloat>(a: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |row: ArrayView1<T>| simd_nanmean(row.as_slice().unwrap()),
         a.rows().into_iter(),
@@ -498,7 +498,7 @@ pub fn masked_mean_axis1<T: AFloat>(
     num_threads: usize,
 ) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |(row, valid_mask): (ArrayView1<T>, ArrayView1<bool>)| simd_masked_mean(
             row.as_slice().unwrap(),
@@ -513,7 +513,7 @@ pub fn masked_mean_axis1<T: AFloat>(
 
 pub fn corr_axis1<T: AFloat>(a: &ArrayView2<T>, b: &ArrayView2<T>, num_threads: usize) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |(a, b): (ArrayView1<T>, ArrayView1<T>)| simd_corr(
             a.as_slice().unwrap(),
@@ -531,7 +531,7 @@ pub fn nancorr_axis1<T: AFloat>(
     num_threads: usize,
 ) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |(a, b): (ArrayView1<T>, ArrayView1<T>)| simd_nancorr(
             a.as_slice().unwrap(),
@@ -550,7 +550,7 @@ pub fn masked_corr_axis1<T: AFloat>(
     num_threads: usize,
 ) -> Vec<T> {
     let mut res: Vec<T> = vec![T::zero(); a.nrows()];
-    let mut slice = UnsafeSlice::new(res.as_mut_slice());
+    let mut slice = UnsafeSlice::new(&mut res);
     parallel_apply!(
         |(a, b, valid_mask): (ArrayView1<T>, ArrayView1<T>, ArrayView1<bool>)| simd_masked_corr(
             a.as_slice().unwrap(),
@@ -572,8 +572,8 @@ pub fn coeff_axis1<T: AFloat>(
 ) -> (Vec<T>, Vec<T>) {
     let mut ws: Vec<T> = vec![T::zero(); x.nrows()];
     let mut bs: Vec<T> = vec![T::zero(); x.nrows()];
-    let mut slice0 = UnsafeSlice::new(ws.as_mut_slice());
-    let mut slice1 = UnsafeSlice::new(bs.as_mut_slice());
+    let mut slice0 = UnsafeSlice::new(&mut ws);
+    let mut slice1 = UnsafeSlice::new(&mut bs);
     if num_threads <= 1 {
         izip!(x.rows(), y.rows())
             .enumerate()
@@ -610,8 +610,8 @@ pub fn masked_coeff_axis1<T: AFloat>(
 ) -> (Vec<T>, Vec<T>) {
     let mut ws: Vec<T> = vec![T::zero(); x.nrows()];
     let mut bs: Vec<T> = vec![T::zero(); x.nrows()];
-    let mut slice0 = UnsafeSlice::new(ws.as_mut_slice());
-    let mut slice1 = UnsafeSlice::new(bs.as_mut_slice());
+    let mut slice0 = UnsafeSlice::new(&mut ws);
+    let mut slice1 = UnsafeSlice::new(&mut bs);
     if num_threads <= 1 {
         izip!(x.rows(), y.rows(), valid_mask.rows())
             .enumerate()
@@ -780,7 +780,7 @@ mod tests {
                 ArrayView2::<$dtype>::from_shape((2, 3), &[4., 5., 6., 7., 8., 9.]).unwrap();
             let arrays = vec![array_2d_u, array_2d_l];
             let mut out: Vec<$dtype> = vec![0.; 3 * 3];
-            let out_slice = UnsafeSlice::new(out.as_mut_slice());
+            let out_slice = UnsafeSlice::new(&mut out);
             fast_concat_2d_axis0(arrays, vec![1, 2], 3, 1, out_slice);
             assert_eq!(out.as_slice(), &[1., 2., 3., 4., 5., 6., 7., 8., 9.]);
         };

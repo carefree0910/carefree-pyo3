@@ -802,7 +802,6 @@ pub fn shm_column_contiguous<T: AFloat>(
     compact_data: ArrayView1<T>,
 ) -> Result<Vec<T>> {
     let mut flattened = vec![T::zero(); datetime_len as usize * columns.len()];
-    let flattened_slice = flattened.as_mut_slice();
     let compact_data = compact_data.view();
     column_contiguous(
         None,
@@ -817,7 +816,7 @@ pub fn shm_column_contiguous<T: AFloat>(
         &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
         &CachedGetter::new(columns.view()),
         &SHMFetcher::new(&compact_data),
-        &mut UnsafeSlice::new(flattened_slice),
+        &mut UnsafeSlice::new(&mut flattened),
         None,
         None,
     )?;
@@ -935,7 +934,6 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
 ) -> Result<Vec<T>> {
     let mut flattened =
         vec![T::zero(); datetime_len as usize * columns.len() * multiplier.unwrap_or(1) as usize];
-    let flattened_slice = flattened.as_mut_slice();
     column_contiguous(
         None,
         datetime_start,
@@ -949,7 +947,7 @@ pub fn shm_sliced_column_contiguous<'a, T: AFloat>(
         &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
         &CachedGetter::new(columns),
         &SlicedSHMFetcher::new(sliced_data, multiplier),
-        &mut UnsafeSlice::new(flattened_slice),
+        &mut UnsafeSlice::new(&mut flattened),
         multiplier,
         None,
     )?;
