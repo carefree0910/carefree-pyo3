@@ -25,6 +25,12 @@ fn bench_bytes_io(c: &mut Criterion) {
     c.bench_function("df_io_from_bytes (f32)", |b| {
         b.iter(|| unsafe { black_box(DataFrame::<f32>::from_bytes(&df_bytes).unwrap()) })
     });
+    c.bench_function("df_io_from_buffer (f32)", |b| {
+        b.iter(|| {
+            let buf = black_box(&df_bytes).as_slice();
+            black_box(DataFrame::<f32>::from_buffer(buf).unwrap())
+        })
+    });
 }
 
 criterion_group!(benches, bench_bytes_io);
