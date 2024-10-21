@@ -205,11 +205,44 @@ fn bench_searchsorted(c: &mut Criterion) {
     }
 }
 
+fn bench_unsafe_slice(c: &mut Criterion) {
+    let num_total = 239 * 5000;
+    let array_f32 = Array1::<f32>::random(num_total, Uniform::new(0., 1.)).to_vec();
+    let array_f64 = Array1::<f64>::random(num_total, Uniform::new(0., 1.)).to_vec();
+    let array_f32_slice = array_f32.as_slice();
+    let array_f64_slice = array_f64.as_slice();
+    c.bench_function("copy (f32)", |b| b.iter(|| black_box(&array_f32).clone()));
+    c.bench_function("copy (f64)", |b| b.iter(|| black_box(&array_f64).clone()));
+    c.bench_function("extend_from_slice (f32)", |b| {
+        b.iter(|| {
+            let empty: Vec<f32> = black_box(vec![0.0; num_total]);
+            black_box(empty).extend_from_slice(array_f32_slice);
+        })
+    });
+    c.bench_function("extend_from_slice (f64)", |b| {
+        b.iter(|| {
+            let empty: Vec<f64> = black_box(vec![0.0; num_total]);
+            black_box(empty).extend_from_slice(array_f64_slice);
+        })
+    });
+    c.bench_function("unsafe_slice copy (f32)", |b| {
+        let mut empty: Vec<f32> = black_box(vec![0.0; num_total]);
+        let empty = black_box(UnsafeSlice::new(&mut empty));
+        b.iter(|| black_box(empty).copy_from_slice(0, array_f32_slice))
+    });
+    c.bench_function("unsafe_slice copy (f64)", |b| {
+        let mut empty: Vec<f64> = black_box(vec![0.0; num_total]);
+        let empty = black_box(UnsafeSlice::new(&mut empty));
+        b.iter(|| black_box(empty).copy_from_slice(0, array_f64_slice))
+    });
+}
+
 criterion_group!(
     benches,
     bench_simd_ops,
     bench_to_valid_indices,
     bench_axis1_ops,
     bench_searchsorted,
+    bench_unsafe_slice,
 );
 criterion_main!(benches);
