@@ -30,8 +30,8 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
 /// > the `Copy` trait), then the caller **MUST** call [`mem::forget`] on the result of
 /// > this function to avoid double-free.
 #[inline]
-pub unsafe fn from_ptr<T: Sized, U>(ptr: *const U, len: usize) -> Vec<T> {
-    let len = mem::size_of::<U>() * len / mem::size_of::<T>();
+pub unsafe fn from_ptr<T: Sized, U>(ptr: *const U, ptr_len: usize) -> Vec<T> {
+    let len = mem::size_of::<U>() * ptr_len / mem::size_of::<T>();
     unsafe { Vec::from_raw_parts(ptr as *mut T, len, len) }
 }
 
