@@ -1,8 +1,9 @@
-use super::{meta::WithCore, DataFrameF64, OwnedDataFrameF64};
+use super::DataFrameF64;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
-pub trait Ops: WithCore {
+#[pymethods]
+impl DataFrameF64 {
     fn nanmean_axis1<'py>(
         &'py self,
         py: Python<'py>,
@@ -25,31 +26,3 @@ pub trait Ops: WithCore {
             .into_pyarray_bound(py)
     }
 }
-
-macro_rules! ops_bindings_impl {
-    ($type:ty) => {
-        impl Ops for $type {}
-
-        #[pymethods]
-        impl $type {
-            fn nanmean_axis1<'py>(
-                &'py self,
-                py: Python<'py>,
-                num_threads: Option<usize>,
-            ) -> Bound<'py, PyArray1<f64>> {
-                Ops::nanmean_axis1(self, py, num_threads)
-            }
-            fn nancorr_with_axis1<'py>(
-                &'py self,
-                py: Python<'py>,
-                other: PyReadonlyArray2<f64>,
-                num_threads: Option<usize>,
-            ) -> Bound<'py, PyArray1<f64>> {
-                Ops::nancorr_with_axis1(self, py, other, num_threads)
-            }
-        }
-    };
-}
-
-ops_bindings_impl!(DataFrameF64);
-ops_bindings_impl!(OwnedDataFrameF64);

@@ -1,19 +1,25 @@
-use super::{DataFrameF64, OwnedDataFrameF64};
-use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
+use super::DataFrameF64;
+use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype, OwnedDataFrame};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
-    PyArray1, PyArray2, PyArrayMethods, ToPyArray,
+    IntoPyArray, PyArray1, PyArray2, PyArrayMethods,
 };
 use pyo3::prelude::*;
 
-pub trait WithCore {
-    fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64>;
-    fn from_core(py: Python, df: DataFrame<f64>) -> Self
-    where
-        Self: Sized;
-}
-
 impl DataFrameF64 {
+    pub(crate) fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64> {
+        let index = self.get_index_array(py);
+        let columns = self.get_columns_array(py);
+        let values = self.get_values_array(py);
+        DataFrame::new_view(index, columns, values)
+    }
+    pub(crate) fn from_core(py: Python, df: OwnedDataFrame<f64>) -> Self {
+        DataFrameF64 {
+            index: df.index.into_pyarray_bound(py).unbind(),
+            columns: df.columns.into_pyarray_bound(py).unbind(),
+            values: df.values.into_pyarray_bound(py).unbind(),
+        }
+    }
     pub(crate) fn get_index_array<'py>(&'py self, py: Python<'py>) -> ArrayView1<'py, IndexDtype> {
         unsafe { self.index.bind(py).as_array() }
     }
@@ -25,38 +31,6 @@ impl DataFrameF64 {
     }
     pub(crate) fn get_values_array<'py>(&'py self, py: Python<'py>) -> ArrayView2<'py, f64> {
         unsafe { self.values.bind(py).as_array() }
-    }
-}
-
-impl WithCore for DataFrameF64 {
-    fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64> {
-        let index = self.get_index_array(py);
-        let columns = self.get_columns_array(py);
-        let values = self.get_values_array(py);
-        DataFrame::new_view(index, columns, values)
-    }
-    fn from_core(py: Python, df: DataFrame<f64>) -> Self {
-        DataFrameF64 {
-            index: df.index().to_pyarray_bound(py).unbind(),
-            columns: df.columns().to_pyarray_bound(py).unbind(),
-            values: df.values().to_pyarray_bound(py).unbind(),
-        }
-    }
-}
-
-impl WithCore for OwnedDataFrameF64 {
-    fn to_core(&self, _: Python) -> DataFrame<f64> {
-        DataFrame::new_view(self.index.view(), self.columns.view(), self.values.view())
-    }
-    fn from_core(_: Python, df: DataFrame<f64>) -> Self {
-        match df {
-            DataFrame::View(_) => panic!("cannot convert a `DataFrameView` to `OwnedDataFrameF64`"),
-            DataFrame::Owned(df) => OwnedDataFrameF64 {
-                index: df.index,
-                columns: df.columns,
-                values: df.values,
-            },
-        }
     }
 }
 
@@ -103,40 +77,6 @@ impl DataFrameF64 {
             index: self.index.clone_ref(py),
             columns: self.columns.clone_ref(py),
             values,
-        }
-    }
-
-    fn to_owned(&self, py: Python) -> OwnedDataFrameF64 {
-        OwnedDataFrameF64 {
-            index: self.get_index_array(py).to_owned(),
-            columns: self.get_columns_array(py).to_owned(),
-            values: self.get_values_array(py).to_owned(),
-        }
-    }
-}
-
-#[pymethods]
-impl OwnedDataFrameF64 {
-    #[getter]
-    fn index(&self, py: Python) -> Py<PyArray1<IndexDtype>> {
-        self.index.view().to_pyarray_bound(py).unbind()
-    }
-
-    #[getter]
-    fn columns(&self, py: Python) -> Py<PyArray1<ColumnsDtype>> {
-        self.columns.view().to_pyarray_bound(py).unbind()
-    }
-
-    #[getter]
-    fn values(&self, py: Python) -> Py<PyArray2<f64>> {
-        self.values.view().to_pyarray_bound(py).unbind()
-    }
-
-    fn to_py(&self, py: Python) -> DataFrameF64 {
-        DataFrameF64 {
-            index: self.index.to_pyarray_bound(py).unbind(),
-            columns: self.columns.to_pyarray_bound(py).unbind(),
-            values: self.values.to_pyarray_bound(py).unbind(),
         }
     }
 }

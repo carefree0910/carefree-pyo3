@@ -98,7 +98,6 @@ def test_io():
     for _ in range(3):
         df = get_random_pandas_df()
         df_rs = DataFrame.from_pandas(df)
-        assert not df_rs.is_owned
         assert df.equals(df_rs.to_pandas())
         with TemporaryDirectory() as dir:
             dir = Path(dir)
@@ -106,11 +105,9 @@ def test_io():
             rs_f = dir / "test.cfdf"
             save_df_rs(df_rs, rs_f)
             df_rs_loaded = load_df_rs(rs_f)
-            assert df_rs_loaded.is_owned
             save_df(df, pd_f)
             df_loaded = load_df(pd_f)
             assert df_loaded.equals(df_rs_loaded.to_pandas())
             save_df_rs(df_rs_loaded, rs_f)
             df_rs_loaded = load_df_rs(rs_f)
-            assert df_rs_loaded.is_owned
             assert df_loaded.equals(df_rs_loaded.to_pandas())
