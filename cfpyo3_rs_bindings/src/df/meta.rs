@@ -1,5 +1,5 @@
 use super::DataFrameF64;
-use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype, OwnedDataFrame};
+use cfpyo3_core::df::{ColumnsDtype, DataFrame, IndexDtype};
 use numpy::{
     ndarray::{ArrayView1, ArrayView2},
     IntoPyArray, PyArray1, PyArray2, PyArrayMethods,
@@ -13,11 +13,16 @@ impl DataFrameF64 {
         let values = self.get_values_array(py);
         DataFrame::new_view(index, columns, values)
     }
-    pub fn from_core(py: Python, df: OwnedDataFrame<f64>) -> Self {
-        DataFrameF64 {
-            index: df.index.into_pyarray_bound(py).unbind(),
-            columns: df.columns.into_pyarray_bound(py).unbind(),
-            values: df.values.into_pyarray_bound(py).unbind(),
+    pub fn from_core(py: Python, df: DataFrame<f64>) -> Self {
+        match df {
+            DataFrame::View(_) => {
+                panic!("`DataFrameF64::from_core` should be called with an `OwnedDataFrame`")
+            }
+            DataFrame::Owned(df) => DataFrameF64 {
+                index: df.index.into_pyarray_bound(py).unbind(),
+                columns: df.columns.into_pyarray_bound(py).unbind(),
+                values: df.values.into_pyarray_bound(py).unbind(),
+            },
         }
     }
     pub(crate) fn get_index_array<'py>(&'py self, py: Python<'py>) -> ArrayView1<'py, IndexDtype> {

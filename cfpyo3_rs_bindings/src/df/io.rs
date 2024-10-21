@@ -14,12 +14,6 @@ impl DataFrameF64 {
     where
         Self: Sized,
     {
-        let df = DataFrame::load(path)?;
-        match df {
-            DataFrame::Owned(df) => Ok(Self::from_core(py, df)),
-            DataFrame::View(_) => {
-                panic!("internal error: `DataFrame::load` should always return an `OwnedDataFrame`")
-            }
-        }
+        Ok(Self::from_core(py, DataFrame::load(path)?))
     }
 }
