@@ -117,6 +117,21 @@ impl DataFrameF64 {
 
 #[pymethods]
 impl OwnedDataFrameF64 {
+    #[getter]
+    fn index(&self, py: Python) -> Py<PyArray1<IndexDtype>> {
+        self.index.view().to_pyarray_bound(py).unbind()
+    }
+
+    #[getter]
+    fn columns(&self, py: Python) -> Py<PyArray1<ColumnsDtype>> {
+        self.columns.view().to_pyarray_bound(py).unbind()
+    }
+
+    #[getter]
+    fn values(&self, py: Python) -> Py<PyArray2<f64>> {
+        self.values.view().to_pyarray_bound(py).unbind()
+    }
+
     fn to_py(&self, py: Python) -> DataFrameF64 {
         DataFrameF64 {
             index: self.index.to_pyarray_bound(py).unbind(),
