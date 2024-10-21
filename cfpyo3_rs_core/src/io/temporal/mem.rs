@@ -66,7 +66,7 @@ impl std::fmt::Display for MemError {
     }
 }
 
-macro_rules! as_data_slice_or_err {
+macro_rules! getter_as_slice_or_err {
     ($data:expr) => {
         match $data.as_slice() {
             Some(data) => data,
@@ -535,7 +535,7 @@ where
                                 f_start_indices.push(f_start_idx);
                             } else {
                                 let data = data_getter.fetch(args)?;
-                                let data = as_data_slice_or_err!(data);
+                                let data = getter_as_slice_or_err!(data);
                                 fill_data(f_start_idx, data);
                             }
                         } else {
@@ -550,7 +550,7 @@ where
                 if !tasks.is_empty() {
                     let batch_data = data_getter.batch_fetch(tasks)?;
                     zip(batch_data, f_start_indices).try_for_each(|(data, f_start_idx)| {
-                        let data = as_data_slice_or_err!(data);
+                        let data = getter_as_slice_or_err!(data);
                         fill_data(f_start_idx, data);
                         Ok(())
                     })?;
@@ -707,7 +707,7 @@ where
         let futures = tasks.into_iter().map(|args| data_getter.fetch(args));
         let batch_data = futures::future::try_join_all(futures).await?;
         zip(batch_data, f_start_indices).try_for_each(|(data, f_start_idx)| {
-            let data = as_data_slice_or_err!(data);
+            let data = getter_as_slice_or_err!(data);
             fill_data(f_start_idx, data);
             Ok(())
         })?;

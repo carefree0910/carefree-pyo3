@@ -1,4 +1,5 @@
 use anyhow::Result;
+use core::{mem, ptr};
 use itertools::{izip, Itertools};
 use num_traits::{Float, FromPrimitive};
 use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
@@ -8,9 +9,7 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display},
     iter::zip,
-    mem,
     ops::{AddAssign, MulAssign, SubAssign},
-    ptr,
     thread::available_parallelism,
 };
 
@@ -80,91 +79,6 @@ impl<'a, T> UnsafeSlice<'a, T> {
         unsafe {
             ptr::copy_nonoverlapping(src.as_ptr(), ptr, src.len());
         }
-    }
-}
-
-const CONCAT_GROUP_LIMIT: usize = 4 * 239 * 5000;
-type Task<'a, 'b, D> = (Vec<usize>, Vec<ArrayView2<'a, D>>, UnsafeSlice<'b, D>);
-#[inline]
-fn fill_concat<D: Copy>((offsets, arrays, mut out): Task<D>) {
-    offsets.iter().enumerate().for_each(|(i, &offset)| {
-        out.copy_from_slice(offset, arrays[i].as_slice().unwrap());
-    });
-}
-pub fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
-    arrays: Vec<ArrayView2<D>>,
-    num_rows: Vec<usize>,
-    num_columns: usize,
-    limit_multiplier: usize,
-    mut out: UnsafeSlice<D>,
-) {
-    let mut cumsum: usize = 0;
-    let mut offsets: Vec<usize> = vec![0; num_rows.len()];
-    for i in 1..num_rows.len() {
-        cumsum += num_rows[i - 1];
-        offsets[i] = cumsum * num_columns;
-    }
-
-    let bumped_limit = CONCAT_GROUP_LIMIT * 16;
-    let total_bytes = offsets.last().unwrap() + num_rows.last().unwrap() * num_columns;
-    let (mut group_limit, mut tasks_divisor) = if total_bytes <= bumped_limit {
-        (CONCAT_GROUP_LIMIT, 8)
-    } else {
-        (bumped_limit, 1)
-    };
-    group_limit *= limit_multiplier;
-
-    let prior_num_tasks = total_bytes.div_ceil(group_limit);
-    let prior_num_threads = prior_num_tasks / tasks_divisor;
-    if prior_num_threads > 1 {
-        group_limit = total_bytes.div_ceil(prior_num_threads);
-        tasks_divisor = 1;
-    }
-
-    let nbytes = mem::size_of::<D>();
-
-    let mut tasks: Vec<Task<D>> = Vec::new();
-    let mut current_tasks: Option<Task<D>> = Some((Vec::new(), Vec::new(), out.shadow()));
-    let mut nbytes_cumsum = 0;
-    izip!(num_rows.iter(), offsets.into_iter(), arrays.into_iter()).for_each(
-        |(&num_row, offset, array)| {
-            nbytes_cumsum += nbytes * num_row * num_columns;
-            if let Some(ref mut current_tasks) = current_tasks {
-                current_tasks.0.push(offset);
-                current_tasks.1.push(array);
-            }
-            if nbytes_cumsum >= group_limit {
-                nbytes_cumsum = 0;
-                if let Some(current_tasks) = current_tasks.take() {
-                    tasks.push(current_tasks);
-                }
-                current_tasks = Some((Vec::new(), Vec::new(), out.shadow()));
-            }
-        },
-    );
-    if let Some(current_tasks) = current_tasks.take() {
-        if !current_tasks.0.is_empty() {
-            tasks.push(current_tasks);
-        }
-    }
-
-    let max_threads = available_parallelism()
-        .expect("failed to get available parallelism")
-        .get();
-    let num_threads = (tasks.len() / tasks_divisor).min(max_threads * 8).min(512);
-    if num_threads <= 1 {
-        tasks.into_iter().for_each(fill_concat);
-    } else {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
-
-        pool.scope(move |s| {
-            tasks.into_iter().for_each(|task| {
-                s.spawn(move |_| fill_concat(task));
-            });
-        });
     }
 }
 
@@ -755,6 +669,91 @@ pub fn batch_searchsorted<T: Ord>(arr: &ArrayView1<T>, values: &ArrayView1<T>) -
         .iter()
         .map(|value| searchsorted(arr, value))
         .collect()
+}
+
+const CONCAT_GROUP_LIMIT: usize = 4 * 239 * 5000;
+type ConcatTask<'a, 'b, D> = (Vec<usize>, Vec<ArrayView2<'a, D>>, UnsafeSlice<'b, D>);
+#[inline]
+fn fill_concat<D: Copy>((offsets, arrays, mut out): ConcatTask<D>) {
+    offsets.iter().enumerate().for_each(|(i, &offset)| {
+        out.copy_from_slice(offset, arrays[i].as_slice().unwrap());
+    });
+}
+pub fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
+    arrays: Vec<ArrayView2<D>>,
+    num_rows: Vec<usize>,
+    num_columns: usize,
+    limit_multiplier: usize,
+    mut out: UnsafeSlice<D>,
+) {
+    let mut cumsum: usize = 0;
+    let mut offsets: Vec<usize> = vec![0; num_rows.len()];
+    for i in 1..num_rows.len() {
+        cumsum += num_rows[i - 1];
+        offsets[i] = cumsum * num_columns;
+    }
+
+    let bumped_limit = CONCAT_GROUP_LIMIT * 16;
+    let total_bytes = offsets.last().unwrap() + num_rows.last().unwrap() * num_columns;
+    let (mut group_limit, mut tasks_divisor) = if total_bytes <= bumped_limit {
+        (CONCAT_GROUP_LIMIT, 8)
+    } else {
+        (bumped_limit, 1)
+    };
+    group_limit *= limit_multiplier;
+
+    let prior_num_tasks = total_bytes.div_ceil(group_limit);
+    let prior_num_threads = prior_num_tasks / tasks_divisor;
+    if prior_num_threads > 1 {
+        group_limit = total_bytes.div_ceil(prior_num_threads);
+        tasks_divisor = 1;
+    }
+
+    let nbytes = mem::size_of::<D>();
+
+    let mut tasks: Vec<ConcatTask<D>> = Vec::new();
+    let mut current_tasks: Option<ConcatTask<D>> = Some((Vec::new(), Vec::new(), out.shadow()));
+    let mut nbytes_cumsum = 0;
+    izip!(num_rows.iter(), offsets.into_iter(), arrays.into_iter()).for_each(
+        |(&num_row, offset, array)| {
+            nbytes_cumsum += nbytes * num_row * num_columns;
+            if let Some(ref mut current_tasks) = current_tasks {
+                current_tasks.0.push(offset);
+                current_tasks.1.push(array);
+            }
+            if nbytes_cumsum >= group_limit {
+                nbytes_cumsum = 0;
+                if let Some(current_tasks) = current_tasks.take() {
+                    tasks.push(current_tasks);
+                }
+                current_tasks = Some((Vec::new(), Vec::new(), out.shadow()));
+            }
+        },
+    );
+    if let Some(current_tasks) = current_tasks.take() {
+        if !current_tasks.0.is_empty() {
+            tasks.push(current_tasks);
+        }
+    }
+
+    let max_threads = available_parallelism()
+        .expect("failed to get available parallelism")
+        .get();
+    let num_threads = (tasks.len() / tasks_divisor).min(max_threads * 8).min(512);
+    if num_threads <= 1 {
+        tasks.into_iter().for_each(fill_concat);
+    } else {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+
+        pool.scope(move |s| {
+            tasks.into_iter().for_each(|task| {
+                s.spawn(move |_| fill_concat(task));
+            });
+        });
+    }
 }
 
 #[cfg(test)]
