@@ -230,20 +230,18 @@ fn bench_unsafe_slice(c: &mut Criterion) {
         })
     });
     c.bench_function("unsafe_slice copy (f32)", |b| {
-        let mut empty: Vec<f32> = black_box(vec![0.0; num_total]);
-        let empty = black_box(UnsafeSlice::new(&mut empty));
-        b.iter(|| black_box(empty).copy_from_slice(0, array_f32_slice))
+        b.iter(|| {
+            let mut empty: Vec<f32> = black_box(vec![0.0; num_total]);
+            let empty = black_box(UnsafeSlice::new(&mut empty));
+            black_box(empty).copy_from_slice(0, array_f32_slice)
+        })
     });
     c.bench_function("unsafe_slice copy (f64)", |b| {
-        let mut empty: Vec<f64> = black_box(vec![0.0; num_total]);
-        let empty = black_box(UnsafeSlice::new(&mut empty));
-        b.iter(|| black_box(empty).copy_from_slice(0, array_f64_slice))
-    });
-    c.bench_function("fast_copy (f32)", |b| {
-        b.iter(|| fast_copy(black_box(array_f32_slice)))
-    });
-    c.bench_function("fast_copy (f64)", |b| {
-        b.iter(|| fast_copy(black_box(array_f64_slice)))
+        b.iter(|| {
+            let mut empty: Vec<f64> = black_box(vec![0.0; num_total]);
+            let empty = black_box(UnsafeSlice::new(&mut empty));
+            black_box(empty).copy_from_slice(0, array_f64_slice)
+        })
     });
 }
 
