@@ -239,6 +239,12 @@ fn bench_unsafe_slice(c: &mut Criterion) {
         let empty = black_box(UnsafeSlice::new(&mut empty));
         b.iter(|| black_box(empty).copy_from_slice(0, array_f64_slice))
     });
+    c.bench_function("fast_copy (f32)", |b| {
+        b.iter(|| fast_copy(black_box(array_f32_slice)))
+    });
+    c.bench_function("fast_copy (f64)", |b| {
+        b.iter(|| fast_copy(black_box(array_f64_slice)))
+    });
 }
 
 criterion_group!(
