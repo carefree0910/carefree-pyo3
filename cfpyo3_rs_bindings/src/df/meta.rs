@@ -7,13 +7,13 @@ use numpy::{
 use pyo3::prelude::*;
 
 impl DataFrameF64 {
-    pub(crate) fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64> {
+    pub fn to_core<'py>(&'py self, py: Python<'py>) -> DataFrame<'py, f64> {
         let index = self.get_index_array(py);
         let columns = self.get_columns_array(py);
         let values = self.get_values_array(py);
         DataFrame::new_view(index, columns, values)
     }
-    pub(crate) fn from_core(py: Python, df: OwnedDataFrame<f64>) -> Self {
+    pub fn from_core(py: Python, df: OwnedDataFrame<f64>) -> Self {
         DataFrameF64 {
             index: df.index.into_pyarray_bound(py).unbind(),
             columns: df.columns.into_pyarray_bound(py).unbind(),
