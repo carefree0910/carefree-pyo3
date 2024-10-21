@@ -13,6 +13,28 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
     unsafe { values.align_to().1 }
 }
 
+/// this is the inner implementation of [`from_vec`]
+///
+/// # Safety
+///
+/// The caller must ensure to check the [`Vec::from_raw_parts`] contract, and that
+/// `ptr` is a valid slice of `T`, which means:
+/// - the underlying bytes are representing valid `T` values.
+/// - `size_of::<U>() * len` is a multiple of `size_of::<T>()`.
+///
+/// Note that this function is even more unsafe than [`from_vec`], because the caller
+/// must ensure that either the owner of `ptr` or the result of this function should
+/// be [`mem::forget`], otherwise the memory will be double-freed.
+///
+/// > So in this case, if the owner of `ptr` is not freeable (e.g., something implements
+/// > the `Copy` trait), then the caller **MUST** call [`mem::forget`] on the result of
+/// > this function to avoid double-free.
+#[inline]
+pub unsafe fn from_ptr<T: Sized, U>(ptr: *const U, len: usize) -> Vec<T> {
+    let len = mem::size_of::<U>() * len / mem::size_of::<T>();
+    unsafe { Vec::from_raw_parts(ptr as *mut T, len, len) }
+}
+
 /// convert an arbitrary [`Vec`] into <T> values, in a complete zero-copy way
 ///
 /// # Safety
@@ -23,8 +45,7 @@ pub unsafe fn to_bytes<T: Sized>(values: &[T]) -> &[u8] {
 /// - `size_of::<U>() * vec.len()` is a multiple of `size_of::<T>()`.
 #[inline]
 pub unsafe fn from_vec<T: Sized, U>(vec: Vec<U>) -> Vec<T> {
-    let values_len = mem::size_of::<U>() * vec.len() / mem::size_of::<T>();
-    let results = unsafe { Vec::from_raw_parts(vec.as_ptr() as *mut T, values_len, values_len) };
+    let results = from_ptr(vec.as_ptr(), vec.len());
     mem::forget(vec);
     results
 }
@@ -56,6 +77,14 @@ mod tests {
             bytes,
             &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn test_from_ptr() {
+        let bytes: [u8; 20] = [1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0];
+        let values: Vec<i32> = unsafe { from_ptr(bytes.as_ptr(), 20) };
+        assert_eq!(values, vec![1, 2, 3, 4, 5]);
+        mem::forget(values);
     }
 
     #[test]
