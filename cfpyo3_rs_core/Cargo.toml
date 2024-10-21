@@ -75,3 +75,8 @@ criterion = [
 name = "array"
 harness = false
 required-features = ["criterion"]
+
+[[bench]]
+name = "convert"
+harness = false
+required-features = ["criterion"]
