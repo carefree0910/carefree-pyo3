@@ -17,7 +17,7 @@ pub struct Tracker {
     history: Vec<f64>,
     tracking: Option<Instant>,
 }
-pub struct Statics {
+pub struct Stats {
     n: usize,
     mean: f64,
     std: f64,
@@ -55,12 +55,12 @@ impl Tracker {
         self.tracking = None;
     }
 
-    pub fn get_statics(&self) -> Statics {
+    pub fn get_stats(&self) -> Stats {
         let n = self.history.len();
         let mean = self.history.iter().sum::<f64>() / n as f64;
         let variance = self.history.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
         let std = variance.sqrt();
-        Statics {
+        Stats {
             n,
             mean,
             std,
@@ -74,7 +74,7 @@ impl Default for Tracker {
         Self::new()
     }
 }
-impl fmt::Debug for Statics {
+impl fmt::Debug for Stats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let sum = self.n as f64 * self.mean;
         let prefix = if self.is_bottleneck {
@@ -117,17 +117,17 @@ impl Trackers {
             .for_each(|tracker| tracker.write().unwrap().reset());
     }
 
-    pub fn get_statics(&self) -> Vec<Statics> {
-        let mut statics: Vec<Statics> = self
+    pub fn get_stats(&self) -> Vec<Stats> {
+        let mut stats: Vec<Stats> = self
             .0
             .iter()
-            .map(|tracker| tracker.read().unwrap().get_statics())
+            .map(|tracker| tracker.read().unwrap().get_stats())
             .collect();
         let mut fast_path_idx = 0;
         let mut bottleneck_idx = 0;
-        let mut fast_path_t = statics[0].n as f64 * statics[0].mean;
+        let mut fast_path_t = stats[0].n as f64 * stats[0].mean;
         let mut bottleneck_t = fast_path_t;
-        for (idx, s) in statics.iter().enumerate() {
+        for (idx, s) in stats.iter().enumerate() {
             let new_t = s.n as f64 * s.mean;
             if new_t > bottleneck_t {
                 bottleneck_idx = idx;
@@ -137,9 +137,9 @@ impl Trackers {
                 fast_path_t = new_t;
             }
         }
-        statics[fast_path_idx].is_fast_path = true;
-        statics[bottleneck_idx].is_bottleneck = true;
-        statics
+        stats[fast_path_idx].is_fast_path = true;
+        stats[bottleneck_idx].is_bottleneck = true;
+        stats
     }
 }
 
@@ -179,10 +179,10 @@ impl NamedTrackers {
             .for_each(|(_, tracker)| tracker.write().unwrap().reset());
     }
 
-    pub fn get_statics(&self) -> HashMap<String, Statics> {
+    pub fn get_stats(&self) -> HashMap<String, Stats> {
         self.0
             .iter()
-            .map(|(name, tracker)| (name.clone(), tracker.read().unwrap().get_statics()))
+            .map(|(name, tracker)| (name.clone(), tracker.read().unwrap().get_stats()))
             .collect()
     }
 }

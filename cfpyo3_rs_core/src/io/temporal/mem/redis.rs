@@ -1,6 +1,6 @@
 use super::{Fetcher, FetcherArgs};
 #[cfg(feature = "bench-io-mem-redis")]
-use crate::toolkit::misc::{Statics, Trackers};
+use crate::toolkit::misc::{Stats, Trackers};
 use crate::toolkit::{
     array::AFloat,
     convert::{from_bytes, to_nbytes},
@@ -243,8 +243,8 @@ impl<T: AFloat> RedisClient<T> {
     }
 
     #[cfg(feature = "bench-io-mem-redis")]
-    pub fn get_tracker_statics(&self) -> Vec<Statics> {
-        self.trackers.get_statics()
+    pub fn get_tracker_stats(&self) -> Vec<Stats> {
+        self.trackers.get_stats()
     }
 
     #[cfg(feature = "bench-io-mem-redis")]
