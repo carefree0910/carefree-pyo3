@@ -1,7 +1,7 @@
 use anyhow::Result;
 use core::{mem, ptr};
 use itertools::{izip, Itertools};
-use num_traits::{Float, FromPrimitive};
+use num_traits::{Float, FromPrimitive, Zero};
 use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
 use std::{
     cell::UnsafeCell,
@@ -756,7 +756,7 @@ pub fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
     }
 }
 
-pub fn fast_copy<T: AFloat>(arr: &[T]) -> Vec<T> {
+pub fn fast_copy<T: Zero + Copy>(arr: &[T]) -> Vec<T> {
     let mut out = vec![T::zero(); arr.len()];
     let mut out_slice = UnsafeSlice::new(&mut out);
     out_slice.copy_from_slice(0, arr);
