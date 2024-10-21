@@ -122,8 +122,12 @@ class DataFrame:
     def to_pandas(self) -> "pd.DataFrame":
         import pandas as pd
 
-        df = self.py_df
-        return pd.DataFrame(df.values, index=df.index, columns=df.columns, copy=False)
+        return pd.DataFrame(
+            data=self._df.values,
+            index=self._df.index,
+            columns=self._df.columns,
+            copy=False,
+        )
 
     @classmethod
     def to_py_df(cls, df: "pd.DataFrame") -> "DataFrameF64":
