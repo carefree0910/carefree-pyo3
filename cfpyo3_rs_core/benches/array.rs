@@ -215,13 +215,13 @@ fn bench_unsafe_slice(c: &mut Criterion) {
     c.bench_function("copy (f64)", |b| b.iter(|| black_box(&array_f64).clone()));
     c.bench_function("extend_from_slice (f32)", |b| {
         b.iter(|| {
-            let empty: Vec<f32> = black_box(vec![0.0; num_total]);
+            let empty: Vec<f32> = black_box(Vec::with_capacity(num_total));
             black_box(empty).extend_from_slice(array_f32_slice);
         })
     });
     c.bench_function("extend_from_slice (f64)", |b| {
         b.iter(|| {
-            let empty: Vec<f64> = black_box(vec![0.0; num_total]);
+            let empty: Vec<f64> = black_box(Vec::with_capacity(num_total));
             black_box(empty).extend_from_slice(array_f64_slice);
         })
     });
