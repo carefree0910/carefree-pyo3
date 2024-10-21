@@ -23,7 +23,7 @@
 
 use crate::{
     df::ColumnsDtype,
-    toolkit::array::{batch_searchsorted, searchsorted, AFloat, UnsafeSlice},
+    toolkit::array::{batch_searchsorted, searchsorted, unique, AFloat, UnsafeSlice},
 };
 use anyhow::Result;
 use numpy::{
@@ -129,21 +129,6 @@ pub trait Fetcher<T: AFloat> {
 
 pub trait AsyncFetcher<T: AFloat> {
     fn fetch(&self, args: FetcherArgs) -> impl Future<Output = Result<CowArray<T, Ix1>>>;
-}
-
-fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
-    let mut counts = HashMap::new();
-
-    for &value in arr.iter() {
-        *counts.entry(value).or_insert(0) += 1;
-    }
-
-    let mut unique_values: Vec<i64> = counts.keys().cloned().collect();
-    unique_values.sort();
-
-    let counts: Vec<i64> = unique_values.iter().map(|&value| counts[&value]).collect();
-
-    (Array1::from(unique_values), Array1::from(counts))
 }
 
 /// a typically useful function for random-fetching temporal row-contiguous data.

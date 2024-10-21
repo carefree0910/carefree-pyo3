@@ -5,6 +5,7 @@ use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, Scalar
 use std::{
     cell::UnsafeCell,
     cmp::Ordering,
+    collections::HashMap,
     fmt::{Debug, Display},
     iter::zip,
     mem,
@@ -726,6 +727,21 @@ pub fn masked_coeff_axis1<T: AFloat>(
 }
 
 // misc
+
+pub fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
+    let mut counts = HashMap::new();
+
+    for &value in arr.iter() {
+        *counts.entry(value).or_insert(0) += 1;
+    }
+
+    let mut unique_values: Vec<i64> = counts.keys().cloned().collect();
+    unique_values.sort();
+
+    let counts: Vec<i64> = unique_values.iter().map(|&value| counts[&value]).collect();
+
+    (Array1::from(unique_values), Array1::from(counts))
+}
 
 pub fn searchsorted<T: Ord>(arr: &ArrayView1<T>, value: &T) -> usize {
     arr.as_slice()
