@@ -211,8 +211,12 @@ fn bench_unsafe_slice(c: &mut Criterion) {
     let array_f64 = Array1::<f64>::random(num_total, Uniform::new(0., 1.)).to_vec();
     let array_f32_slice = array_f32.as_slice();
     let array_f64_slice = array_f64.as_slice();
-    c.bench_function("copy (f32)", |b| b.iter(|| black_box(&array_f32).clone()));
-    c.bench_function("copy (f64)", |b| b.iter(|| black_box(&array_f64).clone()));
+    c.bench_function("array clone (f32)", |b| {
+        b.iter(|| black_box(&array_f32).clone())
+    });
+    c.bench_function("array clone (f64)", |b| {
+        b.iter(|| black_box(&array_f64).clone())
+    });
     c.bench_function("extend_from_slice (f32)", |b| {
         b.iter(|| {
             let empty: Vec<f32> = black_box(Vec::with_capacity(num_total));
