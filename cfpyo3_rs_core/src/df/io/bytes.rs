@@ -100,16 +100,15 @@ pub(super) mod tests {
     use crate::toolkit::convert::from_vec;
 
     pub fn get_test_df<'a>() -> DataFrame<'a, f32> {
-        let mut index_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; INDEX_NBYTES / DF_ALIGN];
-        index_vec[0][0] = 1;
+        let mut index_vec: Vec<u8> = vec![0; INDEX_NBYTES];
+        index_vec[0] = 1;
         let index_vec = unsafe { from_vec(index_vec) };
-        let mut columns_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; COLUMNS_NBYTES / DF_ALIGN];
-        columns_vec[0][0] = 2;
+        let mut columns_vec: Vec<u8> = vec![0; COLUMNS_NBYTES];
+        columns_vec[0] = 2;
         let columns_vec = unsafe { from_vec(columns_vec) };
-        let mut values_vec: Vec<[u8; DF_ALIGN]> = vec![[0u8; DF_ALIGN]; 1];
-        values_vec[0][0] = 3;
+        let mut values_vec: Vec<u8> = vec![0; mem::size_of::<f32>()];
+        values_vec[0] = 3;
         let values_vec = unsafe { from_vec(values_vec) };
-        let values_vec = values_vec[..1].to_vec();
 
         DataFrame::<f32>::from_vec(index_vec, columns_vec, values_vec).unwrap()
     }
