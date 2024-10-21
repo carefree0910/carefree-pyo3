@@ -2,18 +2,19 @@ use crate::df::meta::align_nbytes;
 use crate::df::DataFrame;
 use crate::df::{COLUMNS_NBYTES, INDEX_NBYTES};
 use crate::toolkit::array::AFloat;
-use crate::toolkit::convert::{from_bytes, to_nbytes};
+use crate::toolkit::convert::{from_vec, to_nbytes};
 use anyhow::Result;
 use bytes::Buf;
 
 fn extract_bytes<T: Sized>(buf: &mut impl Buf, nbytes: usize) -> Vec<T> {
     // `advance` will happen inside `copy_to_bytes`
-    let vec_u8 = buf.copy_to_bytes(nbytes).to_vec();
+    let mut vec_u8 = vec![0; nbytes];
+    buf.copy_to_slice(&mut vec_u8);
     let remainder = align_nbytes(nbytes) - nbytes;
     if remainder != 0 {
         buf.advance(remainder);
     }
-    unsafe { from_bytes(vec_u8) }
+    unsafe { from_vec(vec_u8) }
 }
 
 impl<'a, T: AFloat> DataFrame<'a, T> {
@@ -37,10 +38,10 @@ impl<'a, T: AFloat> DataFrame<'a, T> {
         let index_shape = index_nbytes / INDEX_NBYTES;
         let columns_shape = columns_nbytes / COLUMNS_NBYTES;
 
-        let index_vec = extract_bytes(&mut buf, index_nbytes).to_vec();
-        let columns_vec = extract_bytes(&mut buf, columns_nbytes).to_vec();
+        let index_vec = extract_bytes(&mut buf, index_nbytes);
+        let columns_vec = extract_bytes(&mut buf, columns_nbytes);
         let values_nbytes = to_nbytes::<T>(index_shape * columns_shape);
-        let values_vec = extract_bytes(&mut buf, values_nbytes).to_vec();
+        let values_vec = extract_bytes(&mut buf, values_nbytes);
 
         assert!(
             buf.remaining() == 0,
