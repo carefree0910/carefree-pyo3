@@ -1,6 +1,5 @@
 use super::misc::init_rt;
 use anyhow::Result;
-use core::marker::PhantomData;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
@@ -24,7 +23,6 @@ where
     worker: Arc<RwLock<Box<dyn Worker<T, R>>>>,
     results: Arc<Mutex<HashMap<usize, Result<R>>>>,
     pending: Vec<JoinHandle<()>>,
-    phantom_task_data: PhantomData<T>,
 }
 impl<T, R> AsyncQueue<T, R>
 where
@@ -37,7 +35,6 @@ where
             worker: Arc::new(RwLock::new(worker)),
             results: Arc::new(Mutex::new(HashMap::new())),
             pending: Vec::new(),
-            phantom_task_data: PhantomData,
         })
     }
 
