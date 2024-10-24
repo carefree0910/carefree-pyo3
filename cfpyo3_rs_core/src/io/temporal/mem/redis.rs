@@ -55,11 +55,16 @@ fn init_client(urls: Vec<String>) -> Result<Mutex<ClusterClient>> {
         .parse::<u64>()
         .expect("failed to parse REDIS_CONNECTION_TIMEOUT from env");
     let connection_timeout = std::time::Duration::from_secs(connection_timeout);
+    let retries = env::var("REDIS_RETRIES")
+        .unwrap_or("3".to_string())
+        .parse::<u32>()
+        .expect("failed to parse REDIS_RETRIES from env");
     let client = ClusterClientBuilder::new(urls.clone())
         .username(username)
         .password(password)
         .connection_timeout(connection_timeout)
         .response_timeout(connection_timeout)
+        .retries(retries)
         .build()?;
     Ok(Mutex::new(client))
 }
