@@ -268,14 +268,30 @@ impl<T: AFloat> Default for RedisClient<T> {
 /// - a file represents ONE data of ONE day
 /// - the data of each day is flattened and concatenated into a single array
 ///   - it can, however, be either row-contiguous or column-contiguous
+///
+/// if `multiplier` is provided, it makes slightly different assumptions:
+/// - a file represents MULTIPLE data of ONE day (let's say, `C` data)
+/// - the `C` dimension is at the last axis, which means it is 'feature-contiguous'
+///  - it can, however, be either row-contiguous or column-contiguous for the first axis
+///  - it is suggested to use column-contiguous in this case, because the purpose of grouping
+///    features together is to make column-contiguous scheme more efficient
 pub struct RedisFetcher<'a, T: AFloat> {
     client: &'a RedisClient<T>,
+    pub multiplier: Option<i64>,
     pub redis_keys: &'a [ArrayView1<'a, RedisKey>],
 }
 
 impl<'a, T: AFloat> RedisFetcher<'a, T> {
-    pub fn new(client: &'a RedisClient<T>, redis_keys: &'a [ArrayView1<'a, RedisKey>]) -> Self {
-        Self { client, redis_keys }
+    pub fn new(
+        client: &'a RedisClient<T>,
+        multiplier: Option<i64>,
+        redis_keys: &'a [ArrayView1<'a, RedisKey>],
+    ) -> Self {
+        Self {
+            client,
+            multiplier,
+            redis_keys,
+        }
     }
 }
 
@@ -301,8 +317,14 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
         let mut start_indices = Vec::with_capacity(args_len);
         let mut end_indices = Vec::with_capacity(args_len);
         for arg in args {
-            start_indices.push(to_nbytes::<T>(arg.time_start_idx as usize) as isize);
-            end_indices.push(to_nbytes::<T>(arg.time_end_idx as usize) as isize);
+            let mut start = to_nbytes::<T>(arg.time_start_idx as usize);
+            let mut end = to_nbytes::<T>(arg.time_end_idx as usize);
+            if let Some(multiplier) = self.multiplier {
+                start *= multiplier as usize;
+                end *= multiplier as usize;
+            }
+            start_indices.push(start as isize);
+            end_indices.push(end as isize);
         }
         self.client
             .batch_fetch(key, start_indices, end_indices)?

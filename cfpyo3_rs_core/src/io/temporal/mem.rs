@@ -31,7 +31,7 @@ use numpy::{
     Ix1,
 };
 #[cfg(feature = "io-mem-redis")]
-use redis::{RedisClient, RedisFetcher, RedisGroupedFetcher, RedisKey};
+use redis::{RedisClient, RedisFetcher, RedisKey};
 use shm::{SHMFetcher, SlicedSHMFetcher};
 use std::{
     collections::HashMap,
@@ -1136,7 +1136,7 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
                             date_columns_offset,
                             &columns_getter,
                             &columns_indices_getter,
-                            &RedisFetcher::new(redis_client, redis_keys),
+                            &RedisFetcher::new(redis_client, None, redis_keys),
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
                             None,
@@ -1162,7 +1162,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     time_idx_to_date_idx: &[ArrayView1<i64>],
     date_columns_offset: &[ArrayView1<i64>],
     compact_columns: &[ArrayView1<ColumnsDtype>],
-    redis_keys: &[ArrayView1<'a, RedisKey>],
+    redis_keys: &'a [ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
     multipliers: &[i64],
     num_threads: usize,
@@ -1229,7 +1229,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
                     let i_sender = sender.clone();
                     s.spawn(move |_| {
                         let rv = column_contiguous(
-                            None,
+                            Some(g),
                             datetime_start,
                             datetime_end,
                             datetime_len,
@@ -1240,7 +1240,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
                             date_columns_offset,
                             &columns_getter,
                             &columns_indices_getter,
-                            &RedisGroupedFetcher::new(redis_client, multiplier, redis_keys[g]),
+                            &RedisFetcher::new(redis_client, Some(multiplier), redis_keys),
                             &mut flattened_slice.slice(offset, offset + num_data_per_batch),
                             Some(multiplier),
                             Some(Offsets {
