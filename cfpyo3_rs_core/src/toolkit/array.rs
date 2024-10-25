@@ -642,7 +642,7 @@ pub fn masked_coeff_axis1<T: AFloat>(
 
 // misc
 
-pub fn unique(arr: &ArrayView1<i64>) -> (Array1<i64>, Array1<i64>) {
+pub fn unique(arr: &[i64]) -> (Array1<i64>, Array1<i64>) {
     let mut counts = HashMap::new();
 
     for &value in arr.iter() {
