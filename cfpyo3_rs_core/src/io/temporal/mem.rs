@@ -1281,16 +1281,31 @@ mod tests {
             .unwrap()
             .t()
             .to_owned();
-        assert_vec_eq(
-            result,
-            array![
-                [5.0, 7.0, f32::NAN, f32::NAN],
-                [12.0, 14.0, 16.0, f32::NAN],
-                [13.0, 15.0, 17.0, f32::NAN],
-                [22.0, 24.0, 26.0, 28.0],
-                [23.0, 25.0, 27.0, 29.0],
-                [34.0, 36.0, 38.0, 40.0],
-            ],
-        );
+        let gt = array![
+            [5.0, 7.0, f32::NAN, f32::NAN],
+            [12.0, 14.0, 16.0, f32::NAN],
+            [13.0, 15.0, 17.0, f32::NAN],
+            [22.0, 24.0, 26.0, 28.0],
+            [23.0, 25.0, 27.0, 29.0],
+            [34.0, 36.0, 38.0, 40.0],
+        ];
+        assert_vec_eq(result, gt.clone());
+        let flattened = shm_batch_column_contiguous(
+            &[datetime_start],
+            &[datetime_end],
+            datetime_len,
+            &[columns.view()],
+            num_ticks_per_day,
+            &[full_index.view(), full_index.view()],
+            &[date_columns_offset.view(), date_columns_offset.view()],
+            &[compact_symbols.view(), compact_symbols.view()],
+            &[compact_data.view(), compact_data.view()],
+            1,
+        )
+        .unwrap();
+        let result = Array::from_shape_vec((2, 4, 6), flattened).unwrap();
+        for mat in result.axis_iter(Axis(0)) {
+            assert_vec_eq(mat.t().to_owned(), gt.clone());
+        }
     }
 }
