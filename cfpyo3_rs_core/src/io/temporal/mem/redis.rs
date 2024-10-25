@@ -277,8 +277,8 @@ impl<T: AFloat> Default for RedisClient<T> {
 ///    features together is to make column-contiguous scheme more efficient
 pub struct RedisFetcher<'a, T: AFloat> {
     client: &'a RedisClient<T>,
-    pub multiplier: Option<i64>,
-    pub redis_keys: &'a [ArrayView1<'a, RedisKey>],
+    multiplier: Option<i64>,
+    redis_keys: &'a [ArrayView1<'a, RedisKey>],
 }
 
 impl<'a, T: AFloat> RedisFetcher<'a, T> {
