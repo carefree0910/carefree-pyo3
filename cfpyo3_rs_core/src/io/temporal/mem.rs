@@ -31,7 +31,7 @@ use numpy::{
     Ix1,
 };
 #[cfg(feature = "io-mem-redis")]
-use redis::{RedisClient, RedisFetcher, RedisKey};
+use redis::{RedisClient, RedisFetcher, RedisKey, RedisKeyRepr};
 use shm::{SHMFetcher, SlicedSHMFetcher};
 use std::{
     collections::HashMap,
@@ -1136,7 +1136,11 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
                             date_columns_offset,
                             &columns_getter,
                             &columns_indices_getter,
-                            &RedisFetcher::new(redis_client, None, redis_keys),
+                            &RedisFetcher::new(
+                                redis_client,
+                                None,
+                                RedisKeyRepr::Batched(redis_keys),
+                            ),
                             &mut flattened_slice.slice(offset, offset + num_data_per_task),
                             None,
                             None,
@@ -1170,6 +1174,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     redis_keys: &'a [ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
     multipliers: &[i64],
+    use_batch: bool,
     num_columns_chunks: usize,
     num_threads: usize,
 ) -> Result<Vec<T>> {
@@ -1235,8 +1240,14 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
                     let columns_indices_getter = columns_indices_getters[bn_index].clone();
                     let i_sender = sender.clone();
                     s.spawn(move |_| {
+                        let c = if use_batch { Some(g) } else { None };
+                        let redis_keys = if use_batch {
+                            RedisKeyRepr::Batched(redis_keys)
+                        } else {
+                            RedisKeyRepr::Single(redis_keys[g])
+                        };
                         let rv = column_contiguous(
-                            Some(g),
+                            c,
                             datetime_start,
                             datetime_end,
                             datetime_len,

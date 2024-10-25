@@ -264,6 +264,11 @@ impl<T: AFloat> Default for RedisClient<T> {
 
 // public interface
 
+pub(crate) enum RedisKeyRepr<'a> {
+    Single(ArrayView1<'a, RedisKey>),
+    Batched(&'a [ArrayView1<'a, RedisKey>]),
+}
+
 /// a redis fetcher that makes following assumptions:
 /// - a file represents ONE data of ONE day
 /// - the data of each day is flattened and concatenated into a single array
@@ -275,17 +280,17 @@ impl<T: AFloat> Default for RedisClient<T> {
 ///  - it can, however, be either row-contiguous or column-contiguous for the first axis
 ///  - it is suggested to use column-contiguous in this case, because the purpose of grouping
 ///    features together is to make column-contiguous scheme more efficient
-pub struct RedisFetcher<'a, T: AFloat> {
+pub(crate) struct RedisFetcher<'a, T: AFloat> {
     client: &'a RedisClient<T>,
     multiplier: Option<i64>,
-    redis_keys: &'a [ArrayView1<'a, RedisKey>],
+    redis_keys: RedisKeyRepr<'a>,
 }
 
 impl<'a, T: AFloat> RedisFetcher<'a, T> {
     pub fn new(
         client: &'a RedisClient<T>,
         multiplier: Option<i64>,
-        redis_keys: &'a [ArrayView1<'a, RedisKey>],
+        redis_keys: RedisKeyRepr<'a>,
     ) -> Self {
         Self {
             client,
@@ -293,14 +298,33 @@ impl<'a, T: AFloat> RedisFetcher<'a, T> {
             redis_keys,
         }
     }
-}
 
-impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
-    fn can_batch_fetch(&self) -> bool {
-        true
+    fn get_start_end(&self, args: FetcherArgs) -> (usize, usize) {
+        let mut start = to_nbytes::<T>(args.time_start_idx as usize);
+        let mut end = to_nbytes::<T>(args.time_end_idx as usize);
+        if let Some(multiplier) = self.multiplier {
+            start *= multiplier as usize;
+            end *= multiplier as usize;
+        }
+        (start, end)
     }
 
-    fn batch_fetch(&self, args: Vec<FetcherArgs>) -> Result<Vec<CowArray<T, Ix1>>> {
+    fn single_fetch_impl(
+        &self,
+        args: FetcherArgs,
+        redis_keys: ArrayView1<'a, RedisKey>,
+    ) -> Result<CowArray<T, Ix1>> {
+        let key = redis_keys[args.date_idx as usize];
+        let key = std::str::from_utf8(&key.0)?.trim_end_matches(char::from(0));
+        let (start, end) = self.get_start_end(args);
+        Ok(self.client.fetch(key, start as isize, end as isize)?.into())
+    }
+
+    fn batch_fetch_impl(
+        &self,
+        args: Vec<FetcherArgs>,
+        redis_keys: &'a [ArrayView1<'a, RedisKey>],
+    ) -> Result<Vec<CowArray<T, Ix1>>> {
         let c = args[0]
             .c
             .expect("`c` should not be `None` in RedisFetcher::batch_fetch");
@@ -311,7 +335,7 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
         {
             panic!("`c` & `date_idx` should be the same in RedisFetcher::batch_fetch");
         }
-        let key = self.redis_keys[c][date_idx as usize];
+        let key = redis_keys[c][date_idx as usize];
         let key = std::str::from_utf8(&key.0)?.trim_end_matches(char::from(0));
         let args_len = args.len();
         let mut start_indices = Vec::with_capacity(args_len);
@@ -334,38 +358,26 @@ impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
     }
 }
 
-/// similar to `RedisFetcher`, but it makes slightly different assumptions:
-/// - a file represents MULTIPLE data of ONE day (let's say, `C` data)
-/// - the `C` dimension is at the last axis, which means it is 'feature-contiguous'
-///   - it can, however, be either row-contiguous or column-contiguous for the first axis
-///   - it is suggested to use column-contiguous in this case, because the purpose of grouping
-///     features together is to make column-contiguous scheme more efficient
-pub struct RedisGroupedFetcher<'a, T: AFloat> {
-    client: &'a RedisClient<T>,
-    pub multiplier: i64,
-    pub redis_keys: ArrayView1<'a, RedisKey>,
-}
+impl<'a, T: AFloat> Fetcher<T> for RedisFetcher<'a, T> {
+    fn can_batch_fetch(&self) -> bool {
+        matches!(self.redis_keys, RedisKeyRepr::Batched(_))
+    }
 
-impl<'a, T: AFloat> RedisGroupedFetcher<'a, T> {
-    pub fn new(
-        client: &'a RedisClient<T>,
-        multiplier: i64,
-        redis_keys: ArrayView1<'a, RedisKey>,
-    ) -> Self {
-        Self {
-            client,
-            multiplier,
-            redis_keys,
+    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
+        match &self.redis_keys {
+            RedisKeyRepr::Single(keys) => self.single_fetch_impl(args, *keys),
+            RedisKeyRepr::Batched(_) => {
+                panic!("should call `batch_fetch` when `redis_keys` is batched")
+            }
         }
     }
-}
 
-impl<'a, T: AFloat> Fetcher<T> for RedisGroupedFetcher<'a, T> {
-    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
-        let key = self.redis_keys[args.date_idx as usize];
-        let key = std::str::from_utf8(&key.0)?.trim_end_matches(char::from(0));
-        let start = to_nbytes::<T>(args.time_start_idx as usize) * self.multiplier as usize;
-        let end = to_nbytes::<T>(args.time_end_idx as usize) * self.multiplier as usize;
-        Ok(self.client.fetch(key, start as isize, end as isize)?.into())
+    fn batch_fetch(&self, args: Vec<FetcherArgs>) -> Result<Vec<CowArray<T, Ix1>>> {
+        match &self.redis_keys {
+            RedisKeyRepr::Single(_) => {
+                panic!("should call `fetch` when `redis_keys` is not batched")
+            }
+            RedisKeyRepr::Batched(keys) => self.batch_fetch_impl(args, keys),
+        }
     }
 }
