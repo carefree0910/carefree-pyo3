@@ -196,7 +196,7 @@ impl<T: AFloat> RedisClient<T> {
             (Some(pool), Some(pipelines)) => {
                 let idx = roll_pool_idx(&self.cursor, pool);
                 let rv: Vec<Vec<u8>> = {
-                    let mut pipe = pipelines[idx].lock().unwrap();
+                    let pipe = &mut pipelines[idx].lock().unwrap();
                     for (&start, &end) in zip(&start_indices, &end_indices) {
                         pipe.getrange(key, start, end - 1);
                     }
