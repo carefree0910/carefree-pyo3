@@ -1151,6 +1151,11 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
 }
 
 /// a grouped version of `redis_column_contiguous`.
+///
+/// > `num_columns_chunks` is the number of chunks to split the columns to each task.
+/// >
+/// > for example, `num_columns_chunks = 4` means we will split the columns to 4 parts,
+/// > and each part will be processed in a separate task.
 #[cfg(feature = "io-mem-redis")]
 pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
@@ -1165,6 +1170,7 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     redis_keys: &'a [ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
     multipliers: &[i64],
+    num_columns_chunks: usize,
     num_threads: usize,
 ) -> Result<Vec<T>> {
     let bz = datetime_start.len();
@@ -1174,8 +1180,8 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
     let mut flattened = vec![T::zero(); bz * num_data_per_batch];
     let flattened_slice = flattened.as_mut_slice();
-    // let num_columns_per_task = (num_columns / 4).max(10.min(num_columns));
-    let num_columns_per_task = num_columns;
+    let num_columns_chunks = num_columns_chunks.max(1).min(num_columns);
+    let num_columns_per_task = (num_columns / num_columns_chunks).max(10.min(num_columns));
     let num_columns_task = num_columns / num_columns_per_task;
     let num_tasks = bz * n_groups * num_columns_task;
     let num_threads = num_threads.min(num_tasks);
