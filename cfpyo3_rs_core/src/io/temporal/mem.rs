@@ -369,14 +369,14 @@ impl ChannelOffsets {
 /// - `data_getter` - the getter function for data, args: `(start_idx, end_idx)`.
 /// - `flattened` (`datetime_len * columns.len()`) - the flattened array to fill.
 /// - `column_offset` - the column offset, see the `column_offset` concept below.
-/// - `channel_offsets` - the channel offsets for each data item, see documentation for `ChannelOffsets`.
+/// - `channel_offsets` - the channel offsets for each data item, see documentation for [`ChannelOffsets`].
 ///
 /// # `column_offset` concept
 ///
 /// typically, we will spawn tasks among two dimensions: batch size (`B`) and number of features (`C`).
 /// but when the features are aggregated, the feature dimension (or, the 'channel' dimension) will be
 /// reduced by a factor of `Ck`, where `Ck` is the number of features in each aggregate, and will become
-/// the `multiplier` argument in `ChannelOffsets`.
+/// the `multiplier` argument in [`ChannelOffsets`].
 ///
 /// since `Ck` is often ≥ 50, we will need to seek new ways to increase the number of tasks to be spawned
 /// in order to fully utilize the CPU. hence, we breaks the columns (`N`) into `Nk` groups to balance
@@ -387,6 +387,16 @@ impl ChannelOffsets {
 ///
 /// for example, with the above annotations, if the current fetcher is in the `n`th group, then the
 /// `column_offset` should be `n * N / Nk`
+///
+/// # dim order
+///
+/// it is worth mentioning that, depends on whether `channel_offsets` is given, the target array will
+/// have different dimensions order:
+///
+/// - if `channel_offsets` is `None`, the target dim order will `(C, N, datetime_len)`.
+/// - if `channel_offsets` is `Some`, the target dim order will `(N, datetime_len, C)`, because
+///   in this case, we will aggregate multiple data items and treat them as one, as mentioned
+///   in the [`ChannelOffsets`] documentation.
 pub fn column_contiguous<'a, T>(
     c: Option<usize>,
     datetime_start: i64,
@@ -698,6 +708,10 @@ pub trait FetcherGetter<'a, T: AFloat>: Sync {
 /// - [len = `C`] `compact_columns` (`S`) - the full, compact columns.
 /// - [ object ]  `fetcher_getter` - the getter of the [`Fetcher`] object.
 /// - [ scalar ]  `num_threads` - the number of threads to use.
+///
+/// # dim order
+///
+/// the target dim order (shape) will be `(B, C, N, datetime_len)`.
 pub fn batch_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
@@ -769,7 +783,7 @@ pub fn batch_column_contiguous<'a, T: AFloat>(
 /// # constants
 ///
 /// - `B`: batch size.
-/// - `G`: number of groups, usually there are multiple fetchers in each group.
+/// - `G`: number of groups, usually there are multiple features in each group.
 /// - `Nd`: total number of the dates.
 /// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`.
 /// - `S`: total number of columns, equals to `sum(Sn)`.
@@ -792,6 +806,10 @@ pub fn batch_column_contiguous<'a, T: AFloat>(
 /// > for example, `num_columns_chunks = 4` means we will split the columns to 4 parts,
 /// > and each part will be processed in a separate task.
 /// - [ scalar ]  `num_threads` - the number of threads to use.
+///
+/// # dim order
+///
+/// the target dim order (shape) will be `(B, N, datetime_len, C)`, where `C` is sum of all `multipliers`.
 pub fn batch_grouped_column_contiguous<T: AFloat>(
     datetime_start: &[i64],
     datetime_end: &[i64],
