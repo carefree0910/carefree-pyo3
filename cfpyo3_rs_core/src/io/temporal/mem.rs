@@ -136,9 +136,9 @@ pub trait AsyncFetcher<T: AFloat> {
 ///
 /// # constants
 ///
-/// - `Nd`: total number of the dates
-/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
-/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `Nd`: total number of the dates.
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`.
+/// - `S`: total number of columns, equals to `sum(Sn)`.
 /// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
 ///
 /// # arguments
@@ -237,26 +237,40 @@ where
     }
 }
 
+pub trait ColumnIndicesGetter {
+    fn get(&self, i: usize, date_columns: &ArrayView1<ColumnsDtype>) -> Vec<usize>;
+}
+struct CachedGetter<'a>(
+    Arc<Mutex<HashMap<usize, Vec<usize>>>>,
+    ArrayView1<'a, ColumnsDtype>,
+);
+impl<'a> CachedGetter<'a> {
+    fn new(columns: ArrayView1<'a, ColumnsDtype>) -> Self {
+        Self(Arc::new(Mutex::new(HashMap::new())), columns)
+    }
+    fn new_vec(columns: &'a [ArrayView1<'a, ColumnsDtype>]) -> Vec<Self> {
+        columns.iter().map(|x| Self::new(x.view())).collect()
+    }
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0), self.1)
+    }
+}
+impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
+    fn get(&self, i: usize, date_columns: &ArrayView1<ColumnsDtype>) -> Vec<usize> {
+        let mut cache = self.0.lock().unwrap();
+        if let Some(indices) = cache.get(&i) {
+            indices.clone()
+        } else {
+            let indices = batch_searchsorted(date_columns, &self.1);
+            cache.insert(i, indices.clone());
+            indices
+        }
+    }
+}
+
 /// a struct that represents the offsets for each data item at the 'channel' dimension.
 ///
-/// # `column_offset` concept
-///
-/// typically, we will spawn tasks among two dimensions: batch size (`B`) and number of features (`C`).
-/// but when the features are aggregated, the feature dimension (or, the 'channel' dimension) will be
-/// reduced by a factor of `Ck`, where `Ck` is the number of features in each aggregate, and will become
-/// the `multiplier` argument.
-///
-/// since `Ck` is often ≥ 50, we will need to seek new ways to increase the number of tasks to be spawned
-/// in order to fully utilize the CPU. hence, we breaks the columns (`N`) into `Nk` groups to balance
-/// the situation.
-///
-/// in this case, `column_offset` will be important, as it tells us in which column group the current
-/// fetcher is in.
-///
-/// for example, with the above annotations, if the current fetcher is in the `n`th group, then the
-/// `column_offset` should be `n * N / Nk`
-///
-/// # `channel_pad_start/end` concepts
+/// # concepts
 ///
 /// a data item is typically a single fp32, so the data we fetched from the `Fetcher` looks like:
 ///
@@ -309,49 +323,22 @@ where
 ///
 /// so you will notice that in order to fill those data into the 2D array, we need to know
 /// the 'position' of the current data in each 'column' - or precisely, the 'channel'. that's
-/// why we need the `channel_pad_start` and `channel_pad_end`.
+/// why we need the `pad_start` and `pad_end`.
 ///
-/// in the above example, the `channel_pad_start` and `channel_pad_end` of each data will be:
+/// in the above example, the `multiplier`, `pad_start` and `pad_end` of each data will be:
 ///
-/// - (0, q+r) for `i`
-/// - (p, r) for `j`
-/// - (p+q, 0) for `k`
+/// - (p, 0, q+r) for `i`
+/// - (q, p, r) for `j`
+/// - (r, p+q, 0) for `k`
 ///
-#[derive(Default)]
-pub struct Offsets {
-    column_offset: i64,
-    channel_pad_start: i64,
-    channel_pad_end: i64,
+pub struct ChannelOffsets {
+    multiplier: i64,
+    pad_start: i64,
+    pad_end: i64,
 }
-
-pub trait ColumnIndicesGetter {
-    fn get(&self, i: usize, date_columns: &ArrayView1<ColumnsDtype>) -> Vec<usize>;
-}
-struct CachedGetter<'a>(
-    Arc<Mutex<HashMap<usize, Vec<usize>>>>,
-    ArrayView1<'a, ColumnsDtype>,
-);
-impl<'a> CachedGetter<'a> {
-    fn new(columns: ArrayView1<'a, ColumnsDtype>) -> Self {
-        Self(Arc::new(Mutex::new(HashMap::new())), columns)
-    }
-    fn new_vec(columns: &'a [ArrayView1<'a, ColumnsDtype>]) -> Vec<Self> {
-        columns.iter().map(|x| Self::new(x.view())).collect()
-    }
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0), self.1)
-    }
-}
-impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
-    fn get(&self, i: usize, date_columns: &ArrayView1<ColumnsDtype>) -> Vec<usize> {
-        let mut cache = self.0.lock().unwrap();
-        if let Some(indices) = cache.get(&i) {
-            indices.clone()
-        } else {
-            let indices = batch_searchsorted(date_columns, &self.1);
-            cache.insert(i, indices.clone());
-            indices
-        }
+impl ChannelOffsets {
+    fn total_multiplier(&self) -> i64 {
+        self.multiplier + self.pad_start + self.pad_end
     }
 }
 
@@ -359,9 +346,9 @@ impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
 ///
 /// # constants
 ///
-/// - `Nd`: total number of the dates
-/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`
-/// - `S`: total number of columns, equals to `sum(Sn)`
+/// - `Nd`: total number of the dates.
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`.
+/// - `S`: total number of columns, equals to `sum(Sn)`.
 /// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
 ///
 /// # arguments
@@ -381,11 +368,25 @@ impl<'a> ColumnIndicesGetter for CachedGetter<'a> {
 /// > this interface so you can optimize the performance by caching the result (depends on `i`).
 /// - `data_getter` - the getter function for data, args: `(start_idx, end_idx)`.
 /// - `flattened` (`datetime_len * columns.len()`) - the flattened array to fill.
-/// - `multiplier` - the multiplier for each data item. normally, a data item is a simple fp32,
-///   but in certain cases, we will aggregate multiple data items and treat them as one to enable
-///   the possibility of fetching more contiguous data at once. in this case, we need to know the
-///   multiplier to correctly fill the `flattened` array.
-/// - `offsets` - the offsets for each data item, see documentation for `Offsets`.
+/// - `column_offset` - the column offset, see the `column_offset` concept below.
+/// - `channel_offsets` - the channel offsets for each data item, see documentation for `ChannelOffsets`.
+///
+/// # `column_offset` concept
+///
+/// typically, we will spawn tasks among two dimensions: batch size (`B`) and number of features (`C`).
+/// but when the features are aggregated, the feature dimension (or, the 'channel' dimension) will be
+/// reduced by a factor of `Ck`, where `Ck` is the number of features in each aggregate, and will become
+/// the `multiplier` argument in `ChannelOffsets`.
+///
+/// since `Ck` is often ≥ 50, we will need to seek new ways to increase the number of tasks to be spawned
+/// in order to fully utilize the CPU. hence, we breaks the columns (`N`) into `Nk` groups to balance
+/// the situation.
+///
+/// in this case, `column_offset` will be important, as it tells us in which column group the current
+/// fetcher is in.
+///
+/// for example, with the above annotations, if the current fetcher is in the `n`th group, then the
+/// `column_offset` should be `n * N / Nk`
 pub fn column_contiguous<'a, T>(
     c: Option<usize>,
     datetime_start: i64,
@@ -399,8 +400,8 @@ pub fn column_contiguous<'a, T>(
     columns_indices_getter: &dyn ColumnIndicesGetter,
     data_getter: &dyn Fetcher<T>,
     flattened: &mut UnsafeSlice<T>,
-    multiplier: Option<i64>,
-    offsets: Option<Offsets>,
+    column_offset: Option<i64>,
+    channel_offsets: Option<ChannelOffsets>,
 ) -> Result<()>
 where
     T: AFloat,
@@ -420,50 +421,36 @@ where
             columns_getter(start_idx, end_idx)
         }));
         let num_columns_per_day: Vec<usize> = columns_per_day.iter().map(|x| x.len()).collect();
-        let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match offsets {
+        let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match channel_offsets {
             None => flattened.copy_from_slice(f_start_idx, data_slice),
-            Some(Offsets {
-                channel_pad_start,
-                channel_pad_end,
-                ..
-            }) => match multiplier {
-                None => panic!("`multiplier` should not be `None` when `offsets` is provided"),
-                Some(multiplier) => {
-                    let time_len = data_slice.len() / multiplier as usize;
-                    let total_multiplier = multiplier + channel_pad_start + channel_pad_end;
-                    (0..time_len).for_each(|t| {
-                        let t_start = t as i64 * total_multiplier + channel_pad_start;
-                        let ft_start = f_start_idx + t_start as usize;
-                        let dt_start = t * multiplier as usize;
-                        let dt_end = (t + 1) * multiplier as usize;
-                        flattened.copy_from_slice(ft_start, &data_slice[dt_start..dt_end]);
-                    });
-                }
-            },
+            Some(ChannelOffsets {
+                multiplier,
+                pad_start,
+                pad_end,
+            }) => {
+                let time_len = data_slice.len() / multiplier as usize;
+                let total_multiplier = multiplier + pad_start + pad_end;
+                (0..time_len).for_each(|t| {
+                    let t_start = t as i64 * total_multiplier + pad_start;
+                    let ft_start = f_start_idx + t_start as usize;
+                    let dt_start = t * multiplier as usize;
+                    let dt_end = (t + 1) * multiplier as usize;
+                    flattened.copy_from_slice(ft_start, &data_slice[dt_start..dt_end]);
+                });
+            }
         };
 
-        let mut columns_offset = 0;
         let mut i_time_offset = 0;
-        let column_offset = match offsets {
-            None => 0,
-            Some(Offsets { column_offset, .. }) => column_offset,
-        };
-        let total_multiplier = multiplier.map(|multiplier| {
-            multiplier
-                + match offsets {
-                    None => 0,
-                    Some(Offsets {
-                        channel_pad_start,
-                        channel_pad_end,
-                        ..
-                    }) => channel_pad_start + channel_pad_end,
-                }
-        });
+        let mut total_columns_offset = 0;
+        let column_offset = column_offset.unwrap_or(0);
+        let total_multiplier = channel_offsets
+            .as_ref()
+            .map(|offsets| offsets.total_multiplier());
         columns_per_day
             .iter()
             .enumerate()
             .try_for_each(|(i, date_columns)| -> Result<()> {
-                let i_offset = num_ticks_per_day * columns_offset;
+                let i_offset = num_ticks_per_day * total_columns_offset;
                 let i_start_idx = start_idx + i_offset;
                 let i_time_start_idx = if i == 0 {
                     time_start_idx as i64 % num_ticks_per_day
@@ -522,8 +509,8 @@ where
                             }
                         } else {
                             let mut nan_len = i_time_end_idx - i_time_start_idx;
-                            if let Some(multiplier) = multiplier {
-                                nan_len *= multiplier;
+                            if let Some(offsets) = &channel_offsets {
+                                nan_len *= offsets.multiplier;
                             }
                             fill_data(f_start_idx, vec![T::nan(); nan_len as usize].as_slice());
                         }
@@ -538,7 +525,7 @@ where
                     })?;
                 }
                 i_time_offset = i_time_offset + i_time_end_idx - i_time_start_idx;
-                columns_offset += num_columns_per_day[i] as i64;
+                total_columns_offset += num_columns_per_day[i] as i64;
                 Ok(())
             })?;
         Ok(())
@@ -559,8 +546,8 @@ pub async fn async_column_contiguous<'a, T, F>(
     columns_indices_getter: &dyn ColumnIndicesGetter,
     data_getter: F,
     mut flattened: UnsafeSlice<'_, T>,
-    multiplier: Option<i64>,
-    offsets: Option<Offsets>,
+    column_offset: Option<i64>,
+    channel_offsets: Option<ChannelOffsets>,
 ) -> Result<()>
 where
     T: AFloat,
@@ -581,45 +568,31 @@ where
             columns_getter(start_idx, end_idx)
         }));
         let num_columns_per_day: Vec<usize> = columns_per_day.iter().map(|x| x.len()).collect();
-        let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match offsets {
+        let mut fill_data = |f_start_idx: usize, data_slice: &[T]| match channel_offsets {
             None => flattened.copy_from_slice(f_start_idx, data_slice),
-            Some(Offsets {
-                channel_pad_start,
-                channel_pad_end,
-                ..
-            }) => match multiplier {
-                None => panic!("`multiplier` should not be `None` when `offsets` is provided"),
-                Some(multiplier) => {
-                    let time_len = data_slice.len() / multiplier as usize;
-                    let total_multiplier = multiplier + channel_pad_start + channel_pad_end;
-                    (0..time_len).for_each(|t| {
-                        let t_start = t as i64 * total_multiplier + channel_pad_start;
-                        let ft_start = f_start_idx + t_start as usize;
-                        let dt_start = t * multiplier as usize;
-                        let dt_end = (t + 1) * multiplier as usize;
-                        flattened.copy_from_slice(ft_start, &data_slice[dt_start..dt_end]);
-                    });
-                }
-            },
+            Some(ChannelOffsets {
+                multiplier,
+                pad_start,
+                pad_end,
+            }) => {
+                let time_len = data_slice.len() / multiplier as usize;
+                let total_multiplier = multiplier + pad_start + pad_end;
+                (0..time_len).for_each(|t| {
+                    let t_start = t as i64 * total_multiplier + pad_start;
+                    let ft_start = f_start_idx + t_start as usize;
+                    let dt_start = t * multiplier as usize;
+                    let dt_end = (t + 1) * multiplier as usize;
+                    flattened.copy_from_slice(ft_start, &data_slice[dt_start..dt_end]);
+                });
+            }
         };
 
         let mut columns_offset = 0;
         let mut i_time_offset = 0;
-        let column_offset = match offsets {
-            None => 0,
-            Some(Offsets { column_offset, .. }) => column_offset,
-        };
-        let total_multiplier = multiplier.map(|multiplier| {
-            multiplier
-                + match offsets {
-                    None => 0,
-                    Some(Offsets {
-                        channel_pad_start,
-                        channel_pad_end,
-                        ..
-                    }) => channel_pad_start + channel_pad_end,
-                }
-        });
+        let column_offset = column_offset.unwrap_or(0);
+        let total_multiplier = channel_offsets
+            .as_ref()
+            .map(|offsets| offsets.total_multiplier());
         let mut tasks = Vec::new();
         let mut f_start_indices = Vec::new();
         columns_per_day
@@ -675,8 +648,8 @@ where
                             f_start_indices.push(f_start_idx);
                         } else {
                             let mut nan_len = i_time_end_idx - i_time_start_idx;
-                            if let Some(multiplier) = multiplier {
-                                nan_len *= multiplier;
+                            if let Some(offsets) = &channel_offsets {
+                                nan_len *= offsets.multiplier;
                             }
                             fill_data(f_start_idx, vec![T::nan(); nan_len as usize].as_slice());
                         }
@@ -694,6 +667,236 @@ where
         })?;
         Ok(())
     }
+}
+
+pub trait FetcherGetter<'a, T: AFloat>: Sync {
+    fn get<'b>(&self, c: usize) -> Box<dyn Fetcher<T> + 'b>
+    where
+        'a: 'b;
+}
+
+/// a typically useful function for random-fetching temporal column-contiguous data in batch.
+///
+/// # constants
+///
+/// - `B`: batch size.
+/// - `C`: number of features.
+/// - `Nd`: total number of the dates.
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`.
+/// - `S`: total number of columns, equals to `sum(Sn)`.
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - [len = `B`] `datetime_start` - the start of the datetime range to fetch.
+/// - [len = `B`] `datetime_end` - the end of the datetime range to fetch.
+/// - [ scalar ]  `datetime_len` - the length of the datetime range to fetch.
+/// - [len = `B`] `columns` - the columns to fetch.
+/// - [ scalar ]  `num_ticks_per_day` - equals to `T`.
+/// - [len = `C`] `full_index` - the full datetime index.
+/// - [len = `C`] `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - [len = `C`] `compact_columns` (`S`) - the full, compact columns.
+/// - [ object ]  `fetcher_getter` - the getter of the [`Fetcher`] object.
+/// - [ scalar ]  `num_threads` - the number of threads to use.
+pub fn batch_column_contiguous<'a, T: AFloat>(
+    datetime_start: &[i64],
+    datetime_end: &[i64],
+    datetime_len: i64,
+    columns: &'a [ArrayView1<'a, ColumnsDtype>],
+    num_ticks_per_day: i64,
+    full_index: &[ArrayView1<i64>],
+    date_columns_offset: &[ArrayView1<i64>],
+    compact_columns: &[ArrayView1<ColumnsDtype>],
+    fetcher_getter: &dyn FetcherGetter<T>,
+    num_threads: usize,
+) -> Result<Vec<T>> {
+    let nc = full_index.len();
+    let num_data_per_task = datetime_len as usize * columns[0].len();
+    let num_tasks = datetime_start.len() * nc;
+    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
+    let flattened_slice = flattened.as_mut_slice();
+    let columns_indices_getters = CachedGetter::new_vec(columns);
+    let num_threads = num_threads.min(num_tasks);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()?;
+    let (sender, receiver) = channel();
+    pool.scope(move |s| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        full_index.iter().enumerate().for_each(|(c, &full_index)| {
+            let date_columns_offset = date_columns_offset[c];
+            let compact_columns = &compact_columns[c];
+            let columns_getter = |start_idx: i64, end_idx: i64| {
+                compact_columns.slice(s![start_idx as isize..end_idx as isize])
+            };
+            datetime_start
+                .iter()
+                .enumerate()
+                .for_each(|(i, &datetime_start)| {
+                    let datetime_end = datetime_end[i];
+                    let columns = columns[i];
+                    let offset = (i * nc + c) * num_data_per_task;
+                    let columns_indices_getter = columns_indices_getters[i].clone();
+                    let i_sender = sender.clone();
+                    s.spawn(move |_| {
+                        let rv = column_contiguous(
+                            Some(c),
+                            datetime_start,
+                            datetime_end,
+                            datetime_len,
+                            columns,
+                            num_ticks_per_day,
+                            full_index,
+                            date_columns_offset,
+                            &columns_getter,
+                            &columns_indices_getter,
+                            fetcher_getter.get(c).as_ref(),
+                            &mut flattened_slice.slice(offset, offset + num_data_per_task),
+                            None,
+                            None,
+                        );
+                        i_sender.send(rv).unwrap();
+                    });
+                })
+        });
+    });
+    receiver.iter().try_for_each(|x| x)?;
+    Ok(flattened)
+}
+
+/// a typically useful function for random-fetching temporal grouped-column-contiguous data in batch.
+///
+/// # constants
+///
+/// - `B`: batch size.
+/// - `G`: number of groups, usually there are multiple fetchers in each group.
+/// - `Nd`: total number of the dates.
+/// - `Sn`: number of columns of day 'n'. Notice that `len(Sn) = Nd`.
+/// - `S`: total number of columns, equals to `sum(Sn)`.
+/// - `T`: number of ticks per day, we assume that the number of ticks per day remains the same.
+///
+/// # arguments
+///
+/// - [len = `B`] `datetime_start` - the start of the datetime range to fetch.
+/// - [len = `B`] `datetime_end` - the end of the datetime range to fetch.
+/// - [ scalar ]  `datetime_len` - the length of the datetime range to fetch.
+/// - [len = `B`] `columns` - the columns to fetch.
+/// - [ scalar ]  `num_ticks_per_day` - equals to `T`.
+/// - [len = `G`] `full_index` - the full datetime index.
+/// - [len = `G`] `date_columns_offset` (`Nd + 1`, equals to `[0, *cumsum(Sn)]`) - the offset of each date.
+/// - [len = `G`] `compact_columns` (`S`) - the full, compact columns.
+/// - [ object ]  `fetcher_getter` - the getter of the [`Fetcher`] object.
+/// - [len = `G`] `multipliers` - the `multiplier` for each group, see [`ChannelOffsets`] for more information.
+/// - [ bool ]    `use_batch` - whether to use batch fetching.
+/// - [ scalar ]  `num_columns_chunks` - the number of chunks to split the columns to each task.
+/// > for example, `num_columns_chunks = 4` means we will split the columns to 4 parts,
+/// > and each part will be processed in a separate task.
+/// - [ scalar ]  `num_threads` - the number of threads to use.
+pub fn batch_grouped_column_contiguous<T: AFloat>(
+    datetime_start: &[i64],
+    datetime_end: &[i64],
+    datetime_len: i64,
+    columns: &[ArrayView1<ColumnsDtype>],
+    num_ticks_per_day: i64,
+    full_index: &[ArrayView1<i64>],
+    date_columns_offset: &[ArrayView1<i64>],
+    compact_columns: &[ArrayView1<ColumnsDtype>],
+    fetcher_getter: &dyn FetcherGetter<T>,
+    multipliers: &[i64],
+    use_batch: bool,
+    num_columns_chunks: usize,
+    num_threads: usize,
+) -> Result<Vec<T>> {
+    let bz = datetime_start.len();
+    let nc = multipliers.iter().sum::<i64>();
+    let n_groups = full_index.len();
+    let num_columns = columns[0].len();
+    let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
+    let mut flattened = vec![T::zero(); bz * num_data_per_batch];
+    let flattened_slice = flattened.as_mut_slice();
+    let num_columns_chunks = num_columns_chunks.max(1).min(num_columns);
+    let num_columns_per_task = (num_columns / num_columns_chunks).max(10.min(num_columns));
+    let num_columns_task = num_columns / num_columns_per_task;
+    let num_tasks = bz * n_groups * num_columns_task;
+    let num_threads = num_threads.min(num_tasks);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()?;
+    let (sender, receiver) = channel();
+    pool.scope(move |s| {
+        let flattened_slice = UnsafeSlice::new(flattened_slice);
+        let num_total_columns_task = bz * num_columns_task;
+        let mut columns_indices_getters = Vec::with_capacity(num_total_columns_task);
+        for columns in columns.iter().take(bz) {
+            for n in 0..num_columns_task {
+                let column_start = n * num_columns_per_task;
+                let column_end = if n == num_columns_task - 1 {
+                    num_columns
+                } else {
+                    (n + 1) * num_columns_per_task
+                };
+                columns_indices_getters.push(CachedGetter::new(
+                    columns.slice(s![column_start..column_end]),
+                ));
+            }
+        }
+
+        let mut channel_pad_start = 0;
+        let mut channel_pad_end = nc;
+        for g in 0..n_groups {
+            let full_index = full_index[g];
+            let date_columns_offset = date_columns_offset[g];
+            let compact_columns = &compact_columns[g];
+            let columns_getter = |start_idx: i64, end_idx: i64| {
+                compact_columns.slice(s![start_idx as isize..end_idx as isize])
+            };
+            let multiplier = multipliers[g];
+            let next_pad_start = channel_pad_start + multiplier;
+            channel_pad_end -= multiplier;
+            for b in 0..bz {
+                let datetime_start = datetime_start[b];
+                let datetime_end = datetime_end[b];
+                let offset = b * num_data_per_batch;
+                for n in 0..num_columns_task {
+                    let bn_index = b * num_columns_task + n;
+                    let column_start = n * num_columns_per_task;
+                    let column_end = if n == num_columns_task - 1 {
+                        num_columns
+                    } else {
+                        (n + 1) * num_columns_per_task
+                    };
+                    let columns_indices_getter = columns_indices_getters[bn_index].clone();
+                    let i_sender = sender.clone();
+                    s.spawn(move |_| {
+                        let rv = column_contiguous(
+                            if use_batch { Some(g) } else { None },
+                            datetime_start,
+                            datetime_end,
+                            datetime_len,
+                            columns[b].slice(s![column_start..column_end]),
+                            num_ticks_per_day,
+                            full_index,
+                            date_columns_offset,
+                            &columns_getter,
+                            &columns_indices_getter,
+                            fetcher_getter.get(g).as_ref(),
+                            &mut flattened_slice.slice(offset, offset + num_data_per_batch),
+                            Some(column_start as i64),
+                            Some(ChannelOffsets {
+                                multiplier,
+                                pad_start: channel_pad_start,
+                                pad_end: channel_pad_end,
+                            }),
+                        );
+                        i_sender.send(rv).unwrap();
+                    });
+                }
+            }
+            channel_pad_start = next_pad_start;
+        }
+    });
+    receiver.iter().try_for_each(|x| x)?;
+    Ok(flattened)
 }
 
 // public interfaces
@@ -790,7 +993,7 @@ pub fn shm_column_contiguous<T: AFloat>(
         date_columns_offset,
         &|start_idx, end_idx| compact_columns.slice(s![start_idx as isize..end_idx as isize]),
         &CachedGetter::new(columns.view()),
-        &SHMFetcher::new(&compact_data),
+        &SHMFetcher::new(compact_data),
         &mut UnsafeSlice::new(&mut flattened),
         None,
         None,
@@ -798,6 +1001,15 @@ pub fn shm_column_contiguous<T: AFloat>(
     Ok(flattened)
 }
 
+struct SHMFetcherGetter<'a, T: AFloat>(&'a [ArrayView1<'a, T>]);
+impl<'a, T: AFloat> FetcherGetter<'a, T> for SHMFetcherGetter<'a, T> {
+    fn get<'b>(&self, c: usize) -> Box<dyn Fetcher<T> + 'b>
+    where
+        'a: 'b,
+    {
+        Box::new(SHMFetcher::new(self.0[c].view()))
+    }
+}
 /// a batched version of `shm_column_contiguous`.
 pub fn shm_batch_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
@@ -811,66 +1023,37 @@ pub fn shm_batch_column_contiguous<'a, T: AFloat>(
     compact_data: &'a [ArrayView1<'a, T>],
     num_threads: usize,
 ) -> Result<Vec<T>> {
-    let nc = compact_data.len();
-    let num_data_per_task = datetime_len as usize * columns[0].len();
-    let num_tasks = datetime_start.len() * nc;
-    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
-    let flattened_slice = flattened.as_mut_slice();
-    let columns_indices_getters = CachedGetter::new_vec(columns);
-    let num_threads = num_threads.min(num_tasks);
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build()?;
-    let (sender, receiver) = channel();
-    pool.scope(move |s| {
-        let flattened_slice = UnsafeSlice::new(flattened_slice);
-        compact_data
-            .iter()
-            .enumerate()
-            .for_each(|(c, compact_data)| {
-                let full_index = full_index[c];
-                let date_columns_offset = date_columns_offset[c];
-                let compact_columns = &compact_columns[c];
-                let columns_getter = |start_idx: i64, end_idx: i64| {
-                    compact_columns.slice(s![start_idx as isize..end_idx as isize])
-                };
-                datetime_start
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, &datetime_start)| {
-                        let datetime_end = datetime_end[i];
-                        let columns = columns[i];
-                        let offset = (i * nc + c) * num_data_per_task;
-                        let columns_indices_getter = columns_indices_getters[i].clone();
-                        let i_sender = sender.clone();
-                        s.spawn(move |_| {
-                            let data_getter = SHMFetcher::new(compact_data);
-                            let rv = column_contiguous(
-                                Some(c),
-                                datetime_start,
-                                datetime_end,
-                                datetime_len,
-                                columns,
-                                num_ticks_per_day,
-                                full_index,
-                                date_columns_offset,
-                                &columns_getter,
-                                &columns_indices_getter,
-                                &data_getter,
-                                &mut flattened_slice.slice(offset, offset + num_data_per_task),
-                                None,
-                                None,
-                            );
-                            i_sender.send(rv).unwrap();
-                        });
-                    })
-            });
-    });
-    receiver.iter().try_for_each(|x| x)?;
-    Ok(flattened)
+    let fetcher_getter = SHMFetcherGetter(compact_data);
+    batch_column_contiguous(
+        datetime_start,
+        datetime_end,
+        datetime_len,
+        columns,
+        num_ticks_per_day,
+        full_index,
+        date_columns_offset,
+        compact_columns,
+        &fetcher_getter,
+        num_threads,
+    )
 }
 
-/// similar to `shm_batch_sliced_column_contiguous`, but with a redis client.
+#[cfg(feature = "io-mem-redis")]
+struct RedisFetcherGetter<'a, T: AFloat>(&'a RedisClient<T>, &'a [ArrayView1<'a, RedisKey>]);
+#[cfg(feature = "io-mem-redis")]
+impl<'a, T: AFloat> FetcherGetter<'a, T> for RedisFetcherGetter<'a, T> {
+    fn get<'b>(&self, _: usize) -> Box<dyn Fetcher<T> + 'b>
+    where
+        'a: 'b,
+    {
+        Box::new(RedisFetcher::new(
+            self.0,
+            None,
+            RedisKeyRepr::Batched(self.1),
+        ))
+    }
+}
+/// similar to `shm_batch_column_contiguous`, but with a redis client.
 #[cfg(feature = "io-mem-redis")]
 pub fn redis_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
@@ -885,71 +1068,47 @@ pub fn redis_column_contiguous<'a, T: AFloat>(
     redis_client: &'a RedisClient<T>,
     num_threads: usize,
 ) -> Result<Vec<T>> {
-    let nc = redis_keys.len();
-    let num_data_per_task = datetime_len as usize * columns[0].len();
-    let num_tasks = datetime_start.len() * nc;
-    let mut flattened = vec![T::zero(); num_tasks * num_data_per_task];
-    let flattened_slice = flattened.as_mut_slice();
-    let columns_indices_getters = CachedGetter::new_vec(columns);
-    let num_threads = num_threads.min(num_tasks);
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build()?;
-    let (sender, receiver) = channel();
-    pool.scope(move |s| {
-        let flattened_slice = UnsafeSlice::new(flattened_slice);
-        (0..nc).for_each(|c| {
-            let full_index = full_index[c];
-            let date_columns_offset = date_columns_offset[c];
-            let compact_columns = &compact_columns[c];
-            let columns_getter = |start_idx: i64, end_idx: i64| {
-                compact_columns.slice(s![start_idx as isize..end_idx as isize])
-            };
-            datetime_start
-                .iter()
-                .enumerate()
-                .for_each(|(i, &datetime_start)| {
-                    let datetime_end = datetime_end[i];
-                    let columns = columns[i];
-                    let offset = (i * nc + c) * num_data_per_task;
-                    let columns_indices_getter = columns_indices_getters[i].clone();
-                    let i_sender = sender.clone();
-                    s.spawn(move |_| {
-                        let rv = column_contiguous(
-                            Some(c),
-                            datetime_start,
-                            datetime_end,
-                            datetime_len,
-                            columns,
-                            num_ticks_per_day,
-                            full_index,
-                            date_columns_offset,
-                            &columns_getter,
-                            &columns_indices_getter,
-                            &RedisFetcher::new(
-                                redis_client,
-                                None,
-                                RedisKeyRepr::Batched(redis_keys),
-                            ),
-                            &mut flattened_slice.slice(offset, offset + num_data_per_task),
-                            None,
-                            None,
-                        );
-                        i_sender.send(rv).unwrap();
-                    });
-                })
-        });
-    });
-    receiver.iter().try_for_each(|x| x)?;
-    Ok(flattened)
+    let fetcher_getter = RedisFetcherGetter(redis_client, redis_keys);
+    batch_column_contiguous(
+        datetime_start,
+        datetime_end,
+        datetime_len,
+        columns,
+        num_ticks_per_day,
+        full_index,
+        date_columns_offset,
+        compact_columns,
+        &fetcher_getter,
+        num_threads,
+    )
 }
 
+#[cfg(feature = "io-mem-redis")]
+struct GroupedRedisFetcherGetter<'a, T: AFloat> {
+    use_batch: bool,
+    multipliers: &'a [i64],
+    redis_client: &'a RedisClient<T>,
+    redis_keys: &'a [ArrayView1<'a, RedisKey>],
+}
+#[cfg(feature = "io-mem-redis")]
+impl<'a, T: AFloat> FetcherGetter<'a, T> for GroupedRedisFetcherGetter<'a, T> {
+    fn get<'b>(&self, g: usize) -> Box<dyn Fetcher<T> + 'b>
+    where
+        'a: 'b,
+    {
+        let redis_keys = if self.use_batch {
+            RedisKeyRepr::Batched(self.redis_keys)
+        } else {
+            RedisKeyRepr::Single(self.redis_keys[g])
+        };
+        Box::new(RedisFetcher::new(
+            self.redis_client,
+            Some(self.multipliers[g]),
+            redis_keys,
+        ))
+    }
+}
 /// a grouped version of `redis_column_contiguous`.
-///
-/// > `num_columns_chunks` is the number of chunks to split the columns to each task.
-/// >
-/// > for example, `num_columns_chunks = 4` means we will split the columns to 4 parts,
-/// > and each part will be processed in a separate task.
 #[cfg(feature = "io-mem-redis")]
 pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     datetime_start: &[i64],
@@ -962,107 +1121,32 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     compact_columns: &[ArrayView1<ColumnsDtype>],
     redis_keys: &'a [ArrayView1<'a, RedisKey>],
     redis_client: &'a RedisClient<T>,
-    multipliers: &[i64],
+    multipliers: &'a [i64],
     use_batch: bool,
     num_columns_chunks: usize,
     num_threads: usize,
 ) -> Result<Vec<T>> {
-    let bz = datetime_start.len();
-    let nc = multipliers.iter().sum::<i64>();
-    let n_groups = redis_keys.len();
-    let num_columns = columns[0].len();
-    let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
-    let mut flattened = vec![T::zero(); bz * num_data_per_batch];
-    let flattened_slice = flattened.as_mut_slice();
-    let num_columns_chunks = num_columns_chunks.max(1).min(num_columns);
-    let num_columns_per_task = (num_columns / num_columns_chunks).max(10.min(num_columns));
-    let num_columns_task = num_columns / num_columns_per_task;
-    let num_tasks = bz * n_groups * num_columns_task;
-    let num_threads = num_threads.min(num_tasks);
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build()?;
-    let (sender, receiver) = channel();
-    pool.scope(move |s: &rayon::Scope<'_>| {
-        let flattened_slice = UnsafeSlice::new(flattened_slice);
-        let num_total_columns_task = bz * num_columns_task;
-        let mut columns_indices_getters = Vec::with_capacity(num_total_columns_task);
-        for columns in columns.iter().take(bz) {
-            for n in 0..num_columns_task {
-                let column_start = n * num_columns_per_task;
-                let column_end = if n == num_columns_task - 1 {
-                    num_columns
-                } else {
-                    (n + 1) * num_columns_per_task
-                };
-                columns_indices_getters.push(CachedGetter::new(
-                    columns.slice(s![column_start..column_end]),
-                ));
-            }
-        }
-
-        let mut channel_pad_start = 0;
-        let mut channel_pad_end = nc;
-        for g in 0..n_groups {
-            let full_index = full_index[g];
-            let date_columns_offset = date_columns_offset[g];
-            let compact_columns = &compact_columns[g];
-            let columns_getter = |start_idx: i64, end_idx: i64| {
-                compact_columns.slice(s![start_idx as isize..end_idx as isize])
-            };
-            let multiplier = multipliers[g];
-            let next_pad_start = channel_pad_start + multiplier;
-            channel_pad_end -= multiplier;
-            for b in 0..bz {
-                let datetime_start = datetime_start[b];
-                let datetime_end = datetime_end[b];
-                let offset = b * num_data_per_batch;
-                for n in 0..num_columns_task {
-                    let bn_index = b * num_columns_task + n;
-                    let column_start = n * num_columns_per_task;
-                    let column_end = if n == num_columns_task - 1 {
-                        num_columns
-                    } else {
-                        (n + 1) * num_columns_per_task
-                    };
-                    let columns_indices_getter = columns_indices_getters[bn_index].clone();
-                    let i_sender = sender.clone();
-                    s.spawn(move |_| {
-                        let c = if use_batch { Some(g) } else { None };
-                        let redis_keys = if use_batch {
-                            RedisKeyRepr::Batched(redis_keys)
-                        } else {
-                            RedisKeyRepr::Single(redis_keys[g])
-                        };
-                        let rv = column_contiguous(
-                            c,
-                            datetime_start,
-                            datetime_end,
-                            datetime_len,
-                            columns[b].slice(s![column_start..column_end]),
-                            num_ticks_per_day,
-                            full_index,
-                            date_columns_offset,
-                            &columns_getter,
-                            &columns_indices_getter,
-                            &RedisFetcher::new(redis_client, Some(multiplier), redis_keys),
-                            &mut flattened_slice.slice(offset, offset + num_data_per_batch),
-                            Some(multiplier),
-                            Some(Offsets {
-                                column_offset: column_start as i64,
-                                channel_pad_start,
-                                channel_pad_end,
-                            }),
-                        );
-                        i_sender.send(rv).unwrap();
-                    });
-                }
-            }
-            channel_pad_start = next_pad_start;
-        }
-    });
-    receiver.iter().try_for_each(|x| x)?;
-    Ok(flattened)
+    let fetcher_getter = GroupedRedisFetcherGetter {
+        use_batch,
+        multipliers,
+        redis_client,
+        redis_keys,
+    };
+    batch_grouped_column_contiguous(
+        datetime_start,
+        datetime_end,
+        datetime_len,
+        columns,
+        num_ticks_per_day,
+        full_index,
+        date_columns_offset,
+        compact_columns,
+        &fetcher_getter,
+        multipliers,
+        use_batch,
+        num_columns_chunks,
+        num_threads,
+    )
 }
 
 #[cfg(test)]

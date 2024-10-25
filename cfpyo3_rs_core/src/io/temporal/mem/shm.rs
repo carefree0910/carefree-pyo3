@@ -7,11 +7,11 @@ use numpy::{
 };
 
 pub struct SHMFetcher<'a, T: AFloat> {
-    data: &'a ArrayView1<'a, T>,
+    data: ArrayView1<'a, T>,
 }
 
 impl<'a, T: AFloat> SHMFetcher<'a, T> {
-    pub fn new(data: &'a ArrayView1<'a, T>) -> SHMFetcher<'a, T> {
+    pub fn new(data: ArrayView1<'a, T>) -> SHMFetcher<'a, T> {
         SHMFetcher { data }
     }
 }
