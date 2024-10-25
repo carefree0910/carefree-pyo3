@@ -13,8 +13,8 @@ use numpy::{
     Ix1, PyFixedString,
 };
 use redis::{
-    cluster::{ClusterClient, ClusterClientBuilder, ClusterConnection},
-    Commands, Script,
+    cluster::{ClusterClient, ClusterClientBuilder, ClusterConnection, ClusterPipeline},
+    Commands,
 };
 use std::{env, iter::zip, sync::Mutex};
 
@@ -41,6 +41,7 @@ pub struct RedisClient<T: AFloat> {
     cursor: Mutex<Cursor>,
     cluster: Option<Mutex<ClusterClient>>,
     conn_pool: Option<Vec<Option<Mutex<ClusterConnection>>>>,
+    pipelines: Option<Vec<Mutex<ClusterPipeline>>>,
     warmed_up: bool,
     phantom: PhantomData<T>,
     #[cfg(feature = "bench-io-mem-redis")]
@@ -89,6 +90,7 @@ impl<T: AFloat> RedisClient<T> {
             cursor: Mutex::new(Cursor(0)),
             cluster: None,
             conn_pool: None,
+            pipelines: None,
             warmed_up: false,
             phantom: PhantomData::<T>,
             #[cfg(feature = "bench-io-mem-redis")]
@@ -102,6 +104,11 @@ impl<T: AFloat> RedisClient<T> {
         }
         if reconnect || self.conn_pool.is_none() {
             self.conn_pool = Some((0..pool_size).map(|_| None).collect_vec());
+            self.pipelines = Some(
+                (0..pool_size)
+                    .map(|_| Mutex::new(ClusterPipeline::new()))
+                    .collect_vec(),
+            );
             #[cfg(feature = "bench-io-mem-redis")]
             {
                 self.trackers = Trackers::new(pool_size);
@@ -185,37 +192,28 @@ impl<T: AFloat> RedisClient<T> {
         if start_indices.len() != end_indices.len() {
             panic!("`start_indices` & `end_indices` should have the same length");
         }
-        match &self.conn_pool {
-            None => panic!("should call `reset` before `batch_fetch`"),
-            Some(pool) => {
-                let script = Script::new(
-                    r#"
-                        local key = KEYS[1]
-                        local results = {}
-                        for i, range in ipairs(ARGV) do
-                            local start, end_ = range:match("(%d+)-(%d+)")
-                            results[i] = redis.call("GETRANGE", key, start, end_ - 1)
-                        end
-                        return results
-                    "#,
-                );
-                let ranges_str: Vec<String> = zip(&start_indices, &end_indices)
-                    .map(|(start, end)| format!("{}-{}", start, end))
-                    .collect();
+        match (&self.conn_pool, &self.pipelines) {
+            (Some(pool), Some(pipelines)) => {
+                let idx = roll_pool_idx(&self.cursor, pool);
                 let rv: Vec<Vec<u8>> = {
-                    let idx = roll_pool_idx(&self.cursor, pool);
+                    let mut pipe = pipelines[idx].lock().unwrap();
+                    for (&start, &end) in zip(&start_indices, &end_indices) {
+                        pipe.getrange(key, start, end - 1);
+                    }
                     let mut conn = pool[idx].as_ref().unwrap().lock().unwrap();
                     #[cfg(feature = "bench-io-mem-redis")]
                     {
                         let now = std::time::Instant::now();
-                        let rv: Vec<Vec<u8>> =
-                            script.key(key).arg(ranges_str).invoke(&mut *conn)?;
+                        let rv: Vec<Vec<u8>> = pipe.query(&mut conn)?;
                         self.trackers.track(idx, now.elapsed().as_secs_f64());
+                        pipe.clear();
                         rv
                     }
                     #[cfg(not(feature = "bench-io-mem-redis"))]
                     {
-                        script.key(key).arg(ranges_str).invoke(&mut *conn)?
+                        let rv = pipe.query(&mut conn)?;
+                        pipe.clear();
+                        rv
                     }
                 };
                 if rv.len() != start_indices.len() {
@@ -244,6 +242,7 @@ impl<T: AFloat> RedisClient<T> {
                     .map(Array1::from)
                     .collect())
             }
+            _ => panic!("should call `reset` before `batch_fetch`"),
         }
     }
 
