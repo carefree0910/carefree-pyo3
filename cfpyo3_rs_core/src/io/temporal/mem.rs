@@ -1174,7 +1174,8 @@ pub fn redis_grouped_column_contiguous<'a, T: AFloat>(
     let num_data_per_batch = num_columns * datetime_len as usize * nc as usize;
     let mut flattened = vec![T::zero(); bz * num_data_per_batch];
     let flattened_slice = flattened.as_mut_slice();
-    let num_columns_per_task = (num_columns / 4).max(10.min(num_columns));
+    // let num_columns_per_task = (num_columns / 4).max(10.min(num_columns));
+    let num_columns_per_task = num_columns;
     let num_columns_task = num_columns / num_columns_per_task;
     let num_tasks = bz * n_groups * num_columns_task;
     let num_threads = num_threads.min(num_tasks);
