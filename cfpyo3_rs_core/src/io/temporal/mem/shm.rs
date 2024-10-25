@@ -24,33 +24,3 @@ impl<'a, T: AFloat> Fetcher<T> for SHMFetcher<'a, T> {
             .into())
     }
 }
-
-pub struct SlicedSHMFetcher<'a, T: AFloat> {
-    data_slices: &'a [ArrayView1<'a, T>],
-    multiplier: Option<i64>,
-}
-
-impl<'a, T: AFloat> SlicedSHMFetcher<'a, T> {
-    pub fn new(
-        data_slices: &'a [ArrayView1<'a, T>],
-        multiplier: Option<i64>,
-    ) -> SlicedSHMFetcher<'a, T> {
-        SlicedSHMFetcher {
-            data_slices,
-            multiplier,
-        }
-    }
-}
-
-impl<'a, T: AFloat> Fetcher<T> for SlicedSHMFetcher<'a, T> {
-    fn fetch(&self, args: FetcherArgs) -> Result<CowArray<T, Ix1>> {
-        let data = &self.data_slices[args.date_idx as usize];
-        let mut start_idx = args.time_start_idx;
-        let mut end_idx = args.time_end_idx;
-        if let Some(multiplier) = self.multiplier {
-            start_idx *= multiplier;
-            end_idx *= multiplier;
-        }
-        Ok(data.slice(s![start_idx as isize..end_idx as isize]).into())
-    }
-}
