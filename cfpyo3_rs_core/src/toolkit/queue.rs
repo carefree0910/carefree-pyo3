@@ -20,22 +20,6 @@
 //!    [`AsyncQueue::pop`] method. The results are removed from the hashmap after the user polls it.
 //! 6. After the jobs are done, the user **MUST** call the [`AsyncQueue::reset`] method to
 //!    finalize everything properly.
-//!
-//! ## Worker `data` Design
-//!
-//! Since the `data` sent to the [`Worker`] should be `Send + Sync`, in most cases the `data`
-//! should be 'owned' data. That is, it should be cheap to clone, otherwise the overhead will
-//! be unbearable.
-//!
-//! When everything is rust-native, there exists many workarounds (e.g., `Arc<Mutex<T>>`). But
-//! when we are interacting with another language (e.g., Python), we should design the `data`
-//! carefully. One general approach is as follows:
-//!
-//! 1. Separate the full `data` into two parts: the 'heavy' part and the 'lightweight' part.
-//! 2. Use the 'lightweight' part as the `data` for the [`Worker`], so you can clone it when needed.
-//! 3. Make the 'heavy' part as the fields of the [`Worker`] itself, so it can bypass the `Send + Sync`.
-//! 4. Use [`core::mem::transmute`] to make the [`Worker`] static if the [`AsyncQueue`] is static. In
-//!    this case, please make sure by yourself that the lifetimes are handled properly!
 
 use super::misc::init_rt;
 use anyhow::Result;
@@ -47,16 +31,15 @@ use tokio::{runtime::Runtime, task::JoinHandle};
 
 pub trait Worker<T, R>: Send + Sync
 where
-    T: Send + Sync,
-    R: Send + Sync,
+    R: Send,
 {
     fn process(&self, cursor: usize, data: T) -> Result<R>;
 }
 
 pub struct AsyncQueue<T, R>
 where
-    T: Send + Sync,
-    R: Send + Sync,
+    T: Send,
+    R: Send,
 {
     rt: Runtime,
     worker: Arc<RwLock<Box<dyn Worker<T, R>>>>,
@@ -65,8 +48,8 @@ where
 }
 impl<T, R> AsyncQueue<T, R>
 where
-    T: Send + Sync + 'static,
-    R: Send + Sync + 'static,
+    T: Send + 'static,
+    R: Send + 'static,
 {
     pub fn new(worker: Box<dyn Worker<T, R>>, num_threads: usize) -> Result<Self> {
         Ok(Self {
