@@ -1,14 +1,20 @@
-use anyhow::Result;
-use core::{mem, ptr};
+use anyhow::{Ok, Result};
+use core::{mem, ptr, slice};
 use itertools::{izip, Itertools};
+use memmap2::{Mmap, MmapOptions};
 use num_traits::{Float, FromPrimitive};
-use numpy::ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand};
+use numpy::{
+    ndarray::{stack, Array1, Array2, ArrayView1, ArrayView2, Axis, ScalarOperand},
+    Element,
+};
 use std::{
     cell::UnsafeCell,
     cmp::Ordering,
     collections::HashMap,
     fmt::{Debug, Display},
+    fs::File,
     iter::zip,
+    marker::PhantomData,
     ops::{AddAssign, MulAssign, SubAssign},
     thread::available_parallelism,
 };
@@ -81,6 +87,35 @@ impl<'a, T> UnsafeSlice<'a, T> {
         }
     }
 }
+
+pub struct MmapArray1<T: Element>(Mmap, usize, PhantomData<T>);
+impl<T: Element> MmapArray1<T> {
+    /// # Safety
+    ///
+    /// The use of `mmap` is unsafe, see the documentation of [`MmapOptions`] for more details.
+    pub unsafe fn new(path: &str) -> Result<Self> {
+        let file = File::open(path)?;
+        let mmap = unsafe { MmapOptions::new().map(&file)? };
+        let len = mmap.len();
+        Ok(Self(mmap, len, PhantomData))
+    }
+
+    /// # Safety
+    ///
+    /// The use of [`slice::from_raw_parts`] is unsafe, see its documentation for more details.
+    pub unsafe fn as_slice(&self) -> &[T] {
+        slice::from_raw_parts(self.0.as_ptr() as *const T, self.1)
+    }
+
+    /// # Safety
+    ///
+    /// The use of [`ArrayView1::from_shape_ptr`] is unsafe, see its documentation for more details.
+    pub unsafe fn as_array_view(&self) -> ArrayView1<T> {
+        ArrayView1::from_shape_ptr((self.1,), self.0.as_ptr() as *const T)
+    }
+}
+
+// float ops
 
 pub trait AFloat:
     Float
@@ -759,6 +794,9 @@ pub fn fast_concat_2d_axis0<D: Copy + Send + Sync>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::toolkit::convert::to_bytes;
+    use std::io::Write;
+    use tempfile::tempdir;
 
     fn assert_allclose<T: AFloat>(a: &[T], b: &[T]) {
         let atol = T::from_f64(1e-6).unwrap();
@@ -771,6 +809,23 @@ mod tests {
                 b,
             );
         });
+    }
+
+    #[test]
+    fn test_mmap() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.cfy");
+        let array = Array1::<f32>::from_shape_vec(3, vec![1., 2., 3.]).unwrap();
+        let bytes = unsafe { to_bytes(array.as_slice().unwrap()) };
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(bytes).unwrap();
+        let file_path = file_path.to_str().unwrap();
+        let mmap_array = unsafe { MmapArray1::<f32>::new(file_path).unwrap() };
+        assert_allclose(array.as_slice().unwrap(), unsafe { mmap_array.as_slice() });
+        assert_allclose(
+            array.as_slice().unwrap(),
+            unsafe { mmap_array.as_array_view() }.as_slice().unwrap(),
+        );
     }
 
     macro_rules! test_fast_concat_2d_axis0 {

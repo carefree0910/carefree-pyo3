@@ -31,6 +31,7 @@ opendal = { version = "0.50.0", features = ["services-s3"], optional = true }
 rand = { version = "0.8.5", optional = true }
 redis = { version = "0.26.1", features = ["cluster"], optional = true }
 tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread"], optional = true }
+memmap2 = "0.9.5"
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
