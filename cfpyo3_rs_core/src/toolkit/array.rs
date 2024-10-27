@@ -96,8 +96,15 @@ impl<T: Element> MmapArray1<T> {
     pub unsafe fn new(path: &str) -> Result<Self> {
         let file = File::open(path)?;
         let mmap = unsafe { MmapOptions::new().map(&file)? };
-        let len = mmap.len();
+        let len = mmap.len() / mem::size_of::<T>();
         Ok(Self(mmap, len, PhantomData))
+    }
+
+    pub fn len(&self) -> usize {
+        self.1
+    }
+    pub fn is_empty(&self) -> bool {
+        self.1 == 0
     }
 
     /// # Safety
@@ -821,6 +828,7 @@ mod tests {
         file.write_all(bytes).unwrap();
         let file_path = file_path.to_str().unwrap();
         let mmap_array = unsafe { MmapArray1::<f32>::new(file_path).unwrap() };
+        assert_eq!(array.len(), mmap_array.len());
         assert_allclose(array.as_slice().unwrap(), unsafe { mmap_array.as_slice() });
         assert_allclose(
             array.as_slice().unwrap(),
