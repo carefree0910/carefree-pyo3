@@ -188,6 +188,7 @@ def masked_coeff_axis1(
 
 
 def fast_concat_2d_axis0(arrays: List["np.ndarray"]) -> "np.ndarray":
+    arrays = [np.ascontiguousarray(a) for a in arrays]
     pivot = arrays[0]
     out = _dispatch(
         "fast_concat_2d_axis0",
