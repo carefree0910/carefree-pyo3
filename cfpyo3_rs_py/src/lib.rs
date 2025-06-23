@@ -29,7 +29,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                 ) -> Bound<'py, PyArray1<$dtype>> {
                     let a = a.as_array();
                     let num_threads = num_threads.unwrap_or(8);
-                    $func(&a, num_threads).into_pyarray_bound(py)
+                    $func(&a, num_threads).into_pyarray(py)
                 }
             }
         };
@@ -43,7 +43,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                 ) -> Bound<'py, PyArray1<$dtype>> {
                     let a = a.as_array();
                     let num_threads = num_threads.unwrap_or($default_num_threads);
-                    $func(&a, num_threads).into_pyarray_bound(py)
+                    $func(&a, num_threads).into_pyarray(py)
                 }
             }
         };
@@ -61,7 +61,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let a = a.as_array();
                     let b = b.as_array();
                     let num_threads = num_threads.unwrap_or(8);
-                    $func(&a, &b, num_threads).into_pyarray_bound(py)
+                    $func(&a, &b, num_threads).into_pyarray(py)
                 }
             }
         };
@@ -79,7 +79,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let a = a.as_array();
                     let valid_mask = valid_mask.as_array();
                     let num_threads = num_threads.unwrap_or(8);
-                    $func(&a, &valid_mask, num_threads).into_pyarray_bound(py)
+                    $func(&a, &valid_mask, num_threads).into_pyarray(py)
                 }
             }
         };
@@ -99,7 +99,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let b = b.as_array();
                     let valid_mask = valid_mask.as_array();
                     let num_threads = num_threads.unwrap_or(8);
-                    $func(&a, &b, &valid_mask, num_threads).into_pyarray_bound(py)
+                    $func(&a, &b, &valid_mask, num_threads).into_pyarray(py)
                 }
             }
         };
@@ -127,7 +127,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let y = y.as_array();
                     let num_threads = num_threads.unwrap_or(8);
                     let (ws, bs) = cfpyo3_core::toolkit::array::coeff_axis1(&x, &y, q, num_threads);
-                    (ws.into_pyarray_bound(py), bs.into_pyarray_bound(py))
+                    (ws.into_pyarray(py), bs.into_pyarray(py))
                 }
             }
             paste::item! {
@@ -145,7 +145,7 @@ fn cfpyo3(m: &Bound<'_, PyModule>) -> PyResult<()> {
                     let valid_mask = valid_mask.as_array();
                     let num_threads = num_threads.unwrap_or(8);
                     let (ws, bs) = cfpyo3_core::toolkit::array::masked_coeff_axis1(&x, &y, &valid_mask, q, num_threads);
-                    (ws.into_pyarray_bound(py), bs.into_pyarray_bound(py))
+                    (ws.into_pyarray(py), bs.into_pyarray(py))
                 }
             }
             paste::item! {

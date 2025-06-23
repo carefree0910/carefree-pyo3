@@ -8,7 +8,7 @@ resolver = "2"
 
 [workspace.package]
 
-version = "0.1.13"
+version = "0.2.0"
 
 edition = "2021"
 authors = ["carefree0910 <syameimaru.saki@gmail.com>"]
@@ -25,11 +25,11 @@ license-file = "LICENSE"
 # please make sure the `version`s used here are the same as the
 # `version` defined above (in `workspace.package`)
 
-cfpyo3_rs_core = { path = "cfpyo3_rs_core", version = "0.1.13" }
-cfpyo3_rs_bindings = { path = "cfpyo3_rs_bindings", version = "0.1.13" }
+cfpyo3_rs_core = { path = "cfpyo3_rs_core", version = "0.2.0" }
+cfpyo3_rs_bindings = { path = "cfpyo3_rs_bindings", version = "0.2.0" }
 
 # other common dependencies
 
 anyhow = "1.0.89"
-numpy = "0.21.0"
-pyo3 = { version = "0.21.0", features = ["abi3-py38", "anyhow", "chrono", "extension-module", "multiple-pymethods"] }
+numpy = "0.25.0"
+pyo3 = { version = "0.25.1", features = ["abi3-py312", "anyhow", "chrono", "extension-module", "multiple-pymethods"] }

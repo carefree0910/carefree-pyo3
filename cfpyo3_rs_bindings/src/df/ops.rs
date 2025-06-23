@@ -9,9 +9,7 @@ impl DataFrameF64 {
         py: Python<'py>,
         num_threads: Option<usize>,
     ) -> Bound<'py, PyArray1<f64>> {
-        self.to_core(py)
-            .nanmean_axis1(num_threads)
-            .into_pyarray_bound(py)
+        self.to_core(py).nanmean_axis1(num_threads).into_pyarray(py)
     }
 
     fn nancorr_with_axis1<'py>(
@@ -23,6 +21,6 @@ impl DataFrameF64 {
         let other = other.as_array();
         self.to_core(py)
             .nancorr_with_axis1(other, num_threads)
-            .into_pyarray_bound(py)
+            .into_pyarray(py)
     }
 }

@@ -19,7 +19,7 @@ macro_rules! fast_concat_2d_axis0_impl {
             let mut out: Vec<$dtype> = vec![0.; num_total_rows * num_columns];
             let out_slice = array::UnsafeSlice::new(&mut out);
             array::fast_concat_2d_axis0(arrays, num_rows, num_columns, $multiplier, out_slice);
-            out.into_pyarray_bound(py)
+            out.into_pyarray(py)
         }
     };
 }

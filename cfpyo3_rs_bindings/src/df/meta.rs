@@ -19,9 +19,9 @@ impl DataFrameF64 {
                 panic!("`DataFrameF64::from_core` should be called with an `OwnedDataFrame`")
             }
             DataFrame::Owned(df) => DataFrameF64 {
-                index: df.index.into_pyarray_bound(py).unbind(),
-                columns: df.columns.into_pyarray_bound(py).unbind(),
-                values: df.values.into_pyarray_bound(py).unbind(),
+                index: df.index.into_pyarray(py).unbind(),
+                columns: df.columns.into_pyarray(py).unbind(),
+                values: df.values.into_pyarray(py).unbind(),
             },
         }
     }

@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 env:
-  PYTHON_VERSION: "3.8"
+  PYTHON_VERSION: "3.12"
   CARGO_TERM_COLOR: always
 
 jobs:

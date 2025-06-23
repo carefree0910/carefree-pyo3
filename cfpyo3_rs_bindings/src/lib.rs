@@ -7,7 +7,7 @@ macro_rules! register_submodule {
 
         let py = $parent.py();
         let module_name = $hierarchy.split('.').last().unwrap();
-        let submodule = PyModule::new_bound(py, module_name)?;
+        let submodule = PyModule::new(py, module_name)?;
         py_run!(
             py,
             submodule,
