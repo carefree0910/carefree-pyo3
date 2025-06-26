@@ -81,6 +81,7 @@ jobs:
             --manifest-path cfpyo3_rs_py/Cargo.toml
             --out dist
           sccache: "true"
+          maturin-version: "1.8.7"
       - name: Install wheel
         run: pip install dist/*.whl
       - name: Install test dependencies
@@ -148,6 +149,7 @@ jobs:
             --manifest-path cfpyo3_rs_py/Cargo.toml
             --out dist
           manylinux: ${{ matrix.architecture == 'aarch64' && '2_24' || 'auto' }}
+          maturin-version: "1.8.7"
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
@@ -167,6 +169,7 @@ jobs:
           args: >
             --manifest-path cfpyo3_rs_py/Cargo.toml
             --out dist
+          maturin-version: "1.8.7"
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -187,6 +190,7 @@ jobs:
         with:
           command: upload
           args: --non-interactive --skip-existing wheel-*/*
+          maturin-version: "1.8.7"
 
   release-crates:
     name: Release to crates.io
